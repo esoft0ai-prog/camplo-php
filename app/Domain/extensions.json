@@ -1,0 +1,264 @@
+[
+ {
+  "key": "camplo_mcp",
+  "kind": "camplo_mcp",
+  "name": "Camplo MCP server",
+  "minPlan": "growth",
+  "available": true,
+  "custom": false,
+  "description": "Let your own AI tools (Claude, Cursor, ChatGPT and any MCP client) read this workspace: campaigns, overdue leads, SLA, priority flags and the Morning Brief. Read-only.",
+  "config": {}
+ },
+ {
+  "key": "mcp_linear",
+  "kind": "mcp_server",
+  "name": "Linear",
+  "minPlan": "watchtower",
+  "available": true,
+  "custom": false,
+  "description": "Let the assistant look up issues and projects, for example when a campaign is blocked on a dev task.",
+  "config": {
+   "url": "https://mcp.linear.app/mcp",
+   "auth": "bearer",
+   "tokenLabel": "Linear API key",
+   "docsUrl": "https://linear.app/docs/mcp",
+   "urlEditable": false
+  }
+ },
+ {
+  "key": "mcp_github",
+  "kind": "mcp_server",
+  "name": "GitHub",
+  "minPlan": "watchtower",
+  "available": true,
+  "custom": false,
+  "description": "Let the assistant check landing-page repositories, recent commits and open issues when a page breaks.",
+  "config": {
+   "url": "https://api.githubcopilot.com/mcp/",
+   "auth": "bearer",
+   "tokenLabel": "Personal access token (read-only)",
+   "docsUrl": "https://github.com/github/github-mcp-server",
+   "urlEditable": false
+  }
+ },
+ {
+  "key": "mcp_stripe",
+  "kind": "mcp_server",
+  "name": "Stripe",
+  "minPlan": "watchtower",
+  "available": true,
+  "custom": false,
+  "description": "Let the assistant connect leads to payments, so \"did this lead pay?\" gets a real answer.",
+  "config": {
+   "url": "https://mcp.stripe.com",
+   "auth": "bearer",
+   "tokenLabel": "Restricted key (read-only)",
+   "docsUrl": "https://docs.stripe.com/mcp",
+   "urlEditable": false
+  }
+ },
+ {
+  "key": "mcp_custom",
+  "kind": "mcp_server",
+  "name": "Custom MCP server",
+  "minPlan": "watchtower",
+  "available": true,
+  "custom": false,
+  "description": "Any MCP server reachable over Streamable HTTP. Camplo only calls tools that read data.",
+  "config": {
+   "url": "",
+   "auth": "bearer_optional",
+   "tokenLabel": "Bearer token (optional)",
+   "urlEditable": true
+  }
+ },
+ {
+  "key": "skill_cpl_diagnostician",
+  "kind": "skill",
+  "name": "CPL diagnostician",
+  "minPlan": "growth",
+  "available": true,
+  "custom": false,
+  "description": "Breaks a rising cost per lead into traffic, page and hand-off causes before anyone touches the budget.",
+  "config": {
+   "triggers": [
+    "cpl",
+    "cost per lead",
+    "expensive",
+    "spend",
+    "budget",
+    "cost"
+   ],
+   "instructions": "When cost per lead is the topic, separate three causes before recommending anything: (1) traffic — CTR and spend changes, (2) page — conversion rate and webhook health of the pages feeding the campaign, (3) hand-off — leads lost to slow response. Say which cause the data supports and which it rules out. Never recommend more budget while a page or webhook is broken."
+  }
+ },
+ {
+  "key": "skill_follow_up_writer",
+  "kind": "skill",
+  "name": "Follow-up script writer",
+  "minPlan": "growth",
+  "available": true,
+  "custom": false,
+  "description": "Drafts first-touch messages for a specific lead, in the channel and tone your team uses.",
+  "config": {
+   "triggers": [
+    "follow up",
+    "follow-up",
+    "script",
+    "what should i say",
+    "message the lead",
+    "whatsapp",
+    "reply to",
+    "email the lead",
+    "call script"
+   ],
+   "instructions": "When asked to help contact a lead, write a short first-touch message (under 70 words) that names what the lead asked for, offers one clear next step and a time. Give one version for the likely channel (WhatsApp/SMS if a phone exists, otherwise email). Use the team's stated preferences from memory. Do not promise prices, discounts or outcomes that are not in the data. Remind the user to mark the lead responded in Camplo after sending."
+  }
+ },
+ {
+  "key": "skill_client_report",
+  "kind": "skill",
+  "name": "Client report writer",
+  "minPlan": "growth",
+  "available": true,
+  "custom": false,
+  "description": "Turns a campaign's numbers into a plain-language update you can send a client.",
+  "config": {
+   "triggers": [
+    "client report",
+    "report for",
+    "client update",
+    "weekly update",
+    "summary for the client",
+    "update the client",
+    "write a report"
+   ],
+   "instructions": "When asked for a client-facing update, write it for the client, not the team: 4–6 short sentences covering leads received, how fast they were answered, cost per lead against target, what changed and what happens next. No internal names, no blame, no jargon. Offer it as ready-to-paste text."
+  }
+ },
+ {
+  "key": "skill_lead_qualifier",
+  "kind": "skill",
+  "name": "Lead qualification coach",
+  "minPlan": "growth",
+  "available": true,
+  "custom": false,
+  "description": "Ranks open leads by who to call first, using source, VIP status, waiting time and lifecycle signals.",
+  "config": {
+   "triggers": [
+    "qualify",
+    "qualification",
+    "hot lead",
+    "who should i call",
+    "which leads",
+    "priority leads",
+    "best leads"
+   ],
+   "instructions": "When asked which leads to work, rank open leads: VIP and overdue first, then leads with lifecycle activity (opened emails, booked calls), then newest. Give at most five, each with one line of why. Never invent intent signals that are not in the data."
+  }
+ },
+ {
+  "key": "skill_speed_coach",
+  "kind": "skill",
+  "name": "Speed-to-lead coach",
+  "minPlan": "growth",
+  "available": true,
+  "custom": false,
+  "description": "Finds where response time is being lost and suggests one change at a time — without ranking people.",
+  "config": {
+   "triggers": [
+    "response time",
+    "speed to lead",
+    "speed-to-lead",
+    "too slow",
+    "sla breach",
+    "coach",
+    "team is slow"
+   ],
+   "instructions": "When response time is the topic, look for the pattern (time of day, unassigned leads, specific pages or campaigns) rather than the person. Suggest one process change at a time with the expected effect. Never rank or shame individual teammates; individual performance is private to the owner and the person."
+  }
+ },
+ {
+  "key": "plugin_duplicate_guard",
+  "kind": "plugin",
+  "name": "Duplicate lead guard",
+  "minPlan": "starter",
+  "available": true,
+  "custom": false,
+  "description": "Marks a new lead as a possible duplicate when the same email or phone arrived recently, so two people don't call the same person.",
+  "config": {
+   "fields": [
+    {
+     "key": "windowDays",
+     "label": "Look back (days)",
+     "type": "number",
+     "default": 30,
+     "help": "Leads with the same email or phone within this window are flagged."
+    }
+   ]
+  }
+ },
+ {
+  "key": "plugin_phone_normalizer",
+  "kind": "plugin",
+  "name": "Phone number tidy-up",
+  "minPlan": "starter",
+  "available": true,
+  "custom": false,
+  "description": "Rewrites incoming phone numbers into international format (+234…) so tap-to-call and WhatsApp links work.",
+  "config": {
+   "fields": [
+    {
+     "key": "defaultCountryCode",
+     "label": "Default country code",
+     "type": "text",
+     "default": "+234",
+     "help": "Used when a number arrives without one, e.g. 0803… becomes +234803…"
+    }
+   ]
+  }
+ },
+ {
+  "key": "plugin_round_robin",
+  "kind": "plugin",
+  "name": "Round-robin assignment",
+  "minPlan": "growth",
+  "available": true,
+  "custom": false,
+  "description": "Hands each new unassigned lead to the next teammate in a list you choose. Acts on the owner's behalf.",
+  "config": {
+   "ownerOnly": true,
+   "fields": [
+    {
+     "key": "memberIds",
+     "label": "Teammates in the rotation",
+     "type": "members",
+     "required": true
+    }
+   ]
+  }
+ },
+ {
+  "key": "plugin_weekly_digest",
+  "kind": "plugin",
+  "name": "Weekly digest email",
+  "minPlan": "growth",
+  "available": true,
+  "custom": false,
+  "description": "Every Monday morning, emails a one-screen summary: leads, speed-to-lead, breaches and the campaign that needs attention.",
+  "config": {
+   "fields": [
+    {
+     "key": "recipients",
+     "label": "Send to",
+     "type": "select",
+     "options": [
+      "owner",
+      "team"
+     ],
+     "default": "owner"
+    }
+   ]
+  }
+ }
+]

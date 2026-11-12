@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Domain\Permissions;
+use App\Support\ApiException;
 use App\Support\Crypto;
 use App\Support\Ctx;
 use App\Support\Fail;
@@ -59,7 +60,7 @@ final class AuthService
         return $t->setup_complete ? '/dashboard' : '/setup';
     }
 
-    private static function suspended(): \App\Support\ApiException
+    private static function suspended(): ApiException
     {
         return Fail::forbidden('Your account has been suspended. Contact support at '.Platform::get()['branding']['supportEmail'].'.', 'account_suspended');
     }
@@ -189,6 +190,9 @@ final class AuthService
             return $t;
         });
         Effects::logWorkspace($tenant->id, null, "Workspace created by {$in['name']}");
+        if ($auto) {
+            Jobs::defer(fn () => Memory::ensureBank($tenant->id, $tenant->business_name));
+        }
         $checkoutUrl = null;
         try {
             $checkoutUrl = Polar::createCheckout($in['plan'], $email, $tenant->id);

@@ -6,10 +6,11 @@ use App\Domain\Rules;
 use App\Support\Ctx;
 use App\Support\Fail;
 use App\Support\Fmt;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
-/** Insights feed, recommendations and chat history (model-backed generation arrives in stage 4). */
+/** Insights feed, recommendations, manual refresh and the AI chat. */
 final class IntelService
 {
     public static function serializeInsight(object $i): array
@@ -155,5 +156,45 @@ final class IntelService
         DB::table('chat_messages')->where('tenant_id', $ctx->tenantId)->delete();
 
         return ['ok' => true];
+    }
+
+    /** Manual refresh — debounced per workspace. */
+    public static function manualRefresh(Ctx $ctx): array
+    {
+        $key = "manual-refresh:{$ctx->tenantId}";
+        $last = (int) Cache::get($key, 0);
+        $wait = (int) config('camplo.manual_refresh_debounce_minutes') * 60_000 - (Rules::nowMs() - $last);
+        if ($wait > 0) {
+            return ['refreshed' => false, 'retryInMinutes' => (int) ceil($wait / 60_000)];
+        }
+        Cache::put($key, Rules::nowMs(), 86400);
+
+        return ['refreshed' => true, ...Engine::refresh($ctx->tenantId, true)];
+    }
+
+    public static function chatMessage(Ctx $ctx, string $content, string $depth = 'Standard'): array
+    {
+        $ctx->assertFeature('ai_chat');
+        $text = trim($content);
+        if ($text === '') {
+            throw Fail::bad('Ask Camplo something.');
+        }
+        if (! Rules::hasFeature($ctx->plan, 'depth_selector') || ! isset(Agent::DEPTH_WORKLOAD[$depth])) {
+            $depth = 'Standard';
+        }
+        $prior = DB::table('chat_messages')->where('tenant_id', $ctx->tenantId)->orderByDesc('created_at')->limit(10)->get(['role', 'content'])->reverse()
+            ->map(fn ($m) => ['role' => $m->role, 'content' => $m->content])->values()->all();
+        DB::table('chat_messages')->insert(['tenant_id' => $ctx->tenantId, 'user_id' => $ctx->user->id, 'role' => 'user', 'content' => $text]);
+        $res = Agent::ask(['tenantId' => $ctx->tenantId, 'plan' => $ctx->plan, 'question' => $text, 'depth' => $depth, 'history' => $prior,
+            'user' => ['name' => $ctx->user->name, 'role' => $ctx->user->role, 'canAssign' => $ctx->user->role === 'owner']]);
+        if ($res['kind'] === 'work') {
+            [$tid, $plan, $name] = [$ctx->tenantId, $ctx->plan, $ctx->user->name];
+            Jobs::defer(fn () => Memory::learnFromChat($tid, $plan, $name, $text, $res['answer'], $res['campaignId']));
+        }
+        $id = DB::table('chat_messages')->insertGetId(['tenant_id' => $ctx->tenantId, 'role' => 'assistant', 'content' => $res['answer'], 'workload_level' => $res['workload'], 'sources' => json_encode($res['sources'])]);
+        $at = DB::table('chat_messages')->where('id', $id)->value('created_at');
+
+        return ['id' => $id, 'role' => 'assistant', 'content' => $res['answer'], 'workload' => $res['workload'], 'investigated' => $res['investigated'],
+            'workers' => $res['workers'], 'sources' => $res['sources'], 'createdAt' => Fmt::iso($at)];
     }
 }

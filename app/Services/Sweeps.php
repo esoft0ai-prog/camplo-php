@@ -30,8 +30,10 @@ final class Sweeps
                 'sla' => fn () => self::sla(), 'webhooks' => fn () => self::webhooks(), 'team-notes' => fn () => NoteService::expireTeamNotes(),
                 'digest' => fn () => self::digest(), 'early-warning' => fn () => self::earlyWarning(), 'rollback' => fn () => self::rollbackCleanup(),
                 'suspension' => fn () => self::suspension(), 'campaign-status' => fn () => self::campaignStatus(), 'rt-prune' => fn () => Rt::prune(),
+                'weekly-digest-plugin' => fn () => Plugins::runWeeklyDigests(),
                 // every 30 minutes
                 'cross-tool' => fn () => Cache::add('sweep:cross-tool', 1, 1800) ? CrossToolService::check() : 'not due',
+                'ai' => fn () => self::ai(),
             ] as $label => $fn) {
                 try {
                     $done[$label] = $fn();
@@ -47,6 +49,22 @@ final class Sweeps
         return $done;
     }
 
+    /** Insights refresh for every active workspace (each respects its own interval), then memory measurement. */
+    public static function ai(): int
+    {
+        $n = 0;
+        foreach (DB::table('tenants')->where('status', 'active')->pluck('id') as $id) {
+            try {
+                $n += empty(Engine::refresh($id)['skipped']) ? 1 : 0;
+            } catch (Throwable $e) {
+                Errors::capture($e, ['source' => 'job', 'route' => 'sweep:ai', 'tenantId' => $id]);
+            }
+        }
+        Engine::measureMemory();
+
+        return $n;
+    }
+
     /** SLA alerts for leads past their threshold — idempotent via sla_alert_sent_at. */
     public static function sla(): int
     {
@@ -58,6 +76,9 @@ final class Sweeps
             foreach ($due as $l) {
                 SlaService::sendAlert($t, $l);
                 $n++;
+            }
+            if ($due->isNotEmpty()) {
+                Engine::trigger($t->id, 'sla_breach');
             }
         }
 
@@ -72,6 +93,9 @@ final class Sweeps
             if ($s !== 'never_connected' && $s !== $h->status) {
                 DB::table('webhook_sources')->where('id', $h->id)->update(['status' => $s]);
                 Rt::emit($h->tenant_id, "page:{$h->deployment_id}:webhook", ['status' => $s]);
+                if ($s === 'offline') {
+                    Engine::trigger($h->tenant_id, 'webhook_silence');
+                }
                 $n++;
             }
         }
@@ -161,6 +185,9 @@ final class Sweeps
                 $changed++;
                 DB::table('campaigns')->where('id', $c->id)->update(['status' => $status, 'updated_at' => now()]);
                 Rt::emit($tid, "campaign:{$c->id}:health", ['status' => $status, 'pulse' => $h['status'], 'signals' => $h['signals']]);
+                if ($status === 'critical') {
+                    Engine::trigger($tid, 'health_pulse_change');
+                }
             }
         }
 

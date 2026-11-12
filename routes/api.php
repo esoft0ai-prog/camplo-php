@@ -5,12 +5,16 @@
  * web client in public/ works unchanged.
  */
 
+use App\Http\Controllers\AdminController;
 use App\Http\Controllers\AuthController as A;
 use App\Http\Controllers\CampaignController as C;
+use App\Http\Controllers\ExtensionController as E;
 use App\Http\Controllers\IntelController as I;
 use App\Http\Controllers\LeadController as L;
 use App\Http\Controllers\PageController as P;
 use App\Http\Controllers\RawController as R;
+use App\Http\Controllers\SettingsController;
+use App\Http\Controllers\SiteController;
 use App\Http\Controllers\SlaController as S;
 use App\Http\Controllers\WorkspaceController as W;
 use Illuminate\Support\Facades\Route;
@@ -48,8 +52,34 @@ Route::post('/polar/webhook', [R::class, 'polar']);
 Route::post('/telegram/webhook', [R::class, 'telegram']);
 Route::post('/telegram/{tenantId}', [R::class, 'telegram'])->where('tenantId', $uuid);
 Route::post('/monitor/client-error', [R::class, 'clientError']);
-Route::get('/caddy/ask', [\App\Http\Controllers\SiteController::class, 'caddyAsk']);
+Route::get('/caddy/ask', [SiteController::class, 'caddyAsk']);
 Route::get('/rt/workspace/{name}', [R::class, 'rt'])->where('name', '[a-z-]+');
+// Camplo as an MCP server: stateless Streamable HTTP, its own bearer tokens (cmcp_…).
+Route::any('/mcp', [E::class, 'mcp']);
+
+// ------------------------------------------------------------------ Super Admin API (/api/admin/api/*: its own bearer token, never a tenant session)
+Route::prefix('admin/api')->controller(AdminController::class)->group(function () use ($uuid) {
+    // $uuid is the pattern defined at the top of this file
+    Route::post('/login', 'login');
+    Route::get('/accounts', 'accounts');
+    Route::get('/accounts/{id}', 'account')->where('id', $uuid);
+    Route::patch('/accounts/{id}', 'update')->where('id', $uuid);
+    Route::post('/accounts/{id}/activate', 'activate')->where('id', $uuid);
+    Route::post('/accounts/{id}/suspend', 'suspend')->where('id', $uuid);
+    Route::post('/accounts/{id}/flag', 'flag')->where('id', $uuid);
+    Route::patch('/accounts/{id}/pricing', 'pricing')->where('id', $uuid);
+    Route::post('/accounts/{id}/note', 'note')->where('id', $uuid);
+    Route::post('/accounts/{id}/campaigns/{campaignId}/retrospective/regenerate', 'regenerateRetro')->where(['id' => $uuid, 'campaignId' => $uuid]);
+    Route::get('/platform', 'platform');
+    Route::patch('/platform/{section}', 'savePlatform')->where('section', '[a-z]+');
+    Route::post('/platform/test/{target}', 'testPlatform')->where('target', 'email|billing|ai|telegram');
+    Route::get('/extensions', 'extensions');
+    Route::patch('/extensions/{key}', 'saveExtension');
+    Route::delete('/extensions/{key}', 'deleteExtension');
+    Route::get('/errors', 'errors');
+    Route::post('/errors/{id}/resolve', 'resolveError')->where('id', $uuid);
+    Route::get('/health', 'health');
+});
 
 Route::middleware('authed')->group(function () {
     Route::get('/auth/me', [A::class, 'me']);
@@ -88,23 +118,23 @@ Route::middleware('authed')->group(function () {
     Route::patch('/settings/notifications', [W::class, 'patchNotificationSettings']);
 
     // -------------------------------------------------------------- integrations, webhooks, AI provider, Telegram
-    Route::get('/integrations', [\App\Http\Controllers\SettingsController::class, 'integrations']);
-    Route::post('/integrations/ai/verify', [\App\Http\Controllers\SettingsController::class, 'verifyAi']);
-    Route::post('/integrations/{provider}/connect', [\App\Http\Controllers\SettingsController::class, 'connect'])->where('provider', '[a-z_]+');
-    Route::post('/integrations/{provider}/verify', [\App\Http\Controllers\SettingsController::class, 'verify'])->where('provider', '[a-z_]+');
-    Route::delete('/integrations/{provider}', [\App\Http\Controllers\SettingsController::class, 'disconnect'])->where('provider', '[a-z_]+');
-    Route::get('/webhooks/inbound', [\App\Http\Controllers\SettingsController::class, 'inbound']);
-    Route::post('/webhooks/inbound', [\App\Http\Controllers\SettingsController::class, 'createInbound']);
-    Route::delete('/webhooks/inbound/{id}', [\App\Http\Controllers\SettingsController::class, 'deleteInbound']);
-    Route::get('/webhooks/outbound', [\App\Http\Controllers\SettingsController::class, 'outbound']);
-    Route::post('/webhooks/outbound', [\App\Http\Controllers\SettingsController::class, 'createOutbound']);
-    Route::delete('/webhooks/outbound/{id}', [\App\Http\Controllers\SettingsController::class, 'deleteOutbound']);
-    Route::get('/settings/ai-provider', [\App\Http\Controllers\SettingsController::class, 'aiProvider']);
-    Route::patch('/settings/ai-provider', [\App\Http\Controllers\SettingsController::class, 'patchAiProvider']);
-    Route::get('/settings/telegram', [\App\Http\Controllers\SettingsController::class, 'telegram']);
-    Route::patch('/settings/telegram', [\App\Http\Controllers\SettingsController::class, 'patchTelegram']);
-    Route::post('/settings/telegram/verify', [\App\Http\Controllers\SettingsController::class, 'verifyTelegram']);
-    Route::delete('/settings/telegram', [\App\Http\Controllers\SettingsController::class, 'disconnectTelegram']);
+    Route::get('/integrations', [SettingsController::class, 'integrations']);
+    Route::post('/integrations/ai/verify', [SettingsController::class, 'verifyAi']);
+    Route::post('/integrations/{provider}/connect', [SettingsController::class, 'connect'])->where('provider', '[a-z_]+');
+    Route::post('/integrations/{provider}/verify', [SettingsController::class, 'verify'])->where('provider', '[a-z_]+');
+    Route::delete('/integrations/{provider}', [SettingsController::class, 'disconnect'])->where('provider', '[a-z_]+');
+    Route::get('/webhooks/inbound', [SettingsController::class, 'inbound']);
+    Route::post('/webhooks/inbound', [SettingsController::class, 'createInbound']);
+    Route::delete('/webhooks/inbound/{id}', [SettingsController::class, 'deleteInbound']);
+    Route::get('/webhooks/outbound', [SettingsController::class, 'outbound']);
+    Route::post('/webhooks/outbound', [SettingsController::class, 'createOutbound']);
+    Route::delete('/webhooks/outbound/{id}', [SettingsController::class, 'deleteOutbound']);
+    Route::get('/settings/ai-provider', [SettingsController::class, 'aiProvider']);
+    Route::patch('/settings/ai-provider', [SettingsController::class, 'patchAiProvider']);
+    Route::get('/settings/telegram', [SettingsController::class, 'telegram']);
+    Route::patch('/settings/telegram', [SettingsController::class, 'patchTelegram']);
+    Route::post('/settings/telegram/verify', [SettingsController::class, 'verifyTelegram']);
+    Route::delete('/settings/telegram', [SettingsController::class, 'disconnectTelegram']);
 
     // -------------------------------------------------------------- campaigns
     Route::get('/campaigns', [C::class, 'index']);
@@ -185,6 +215,16 @@ Route::middleware('authed')->group(function () {
     Route::get('/chat/history', [I::class, 'chatHistory']);
     Route::delete('/chat/history', [I::class, 'chatClear']);
     Route::get('/chat/suggestions', [I::class, 'chatSuggestions']);
+    Route::post('/chat/message', [E::class, 'chat']);
+    Route::post('/insights/refresh', [E::class, 'refresh']);
+    Route::get('/intelligence/briefing', [E::class, 'briefing']);
+
+    // -------------------------------------------------------------- extensions
+    Route::get('/extensions', [E::class, 'index']);
+    Route::post('/extensions/mcp-tokens', [E::class, 'createToken']);
+    Route::delete('/extensions/mcp-tokens/{id}', [E::class, 'revokeToken']);
+    Route::patch('/extensions/{key}', [E::class, 'save'])->where('key', '[a-z][a-z0-9_]{1,99}');
+    Route::delete('/extensions/{key}', [E::class, 'remove'])->where('key', '[a-z][a-z0-9_]{1,99}');
 
     // -------------------------------------------------------------- pages (also under /deployments, the ADL name)
     Route::post('/pages/upload', [P::class, 'upload']);

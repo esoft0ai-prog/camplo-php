@@ -412,6 +412,10 @@ final class LeadService
         }
         $tid = $tenant->id;
         Jobs::defer(fn () => Telegram::notifyNewLead($tid, $id));
+        // Lead-batch trigger for the insights refresh (20 leads within 30 minutes).
+        if (DB::table('leads')->where('tenant_id', $tid)->where('received_at', '>=', Fmt::ts(-1800))->count() === 20) {
+            Engine::trigger($tid, 'lead_batch');
+        }
 
         return $lead;
     }

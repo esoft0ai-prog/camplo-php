@@ -63,4 +63,33 @@ final class Jwt
 
         return ['sub' => (string) $c['sub'], 'tid' => $c['tid'], 'role' => (string) ($c['role'] ?? '')];
     }
+
+    /** Super Admin tokens: a separate key (`<secret>:admin`), claim admin=true, 2-hour lifetime. */
+    public static function signAdmin(string $adminId): string
+    {
+        $now = time();
+        $h = self::b64(json_encode(['alg' => 'HS256']));
+        $p = self::b64(json_encode(['admin' => true, 'sub' => $adminId, 'iat' => $now, 'exp' => $now + 7200]));
+
+        return "{$h}.{$p}.".self::b64(hash_hmac('sha256', "{$h}.{$p}", self::secret().':admin', true));
+    }
+
+    public static function verifyAdmin(string $token): ?string
+    {
+        $parts = explode('.', $token);
+        if (count($parts) !== 3) {
+            return null;
+        }
+        [$h, $p, $s] = $parts;
+        if ((json_decode((string) self::unb64($h), true)['alg'] ?? null) !== 'HS256'
+            || ! hash_equals(self::b64(hash_hmac('sha256', "{$h}.{$p}", self::secret().':admin', true)), $s)) {
+            return null;
+        }
+        $c = json_decode((string) self::unb64($p), true);
+        if (! is_array($c) || ($c['admin'] ?? null) !== true || empty($c['sub']) || (isset($c['exp']) && (int) $c['exp'] < time())) {
+            return null;
+        }
+
+        return (string) $c['sub'];
+    }
 }

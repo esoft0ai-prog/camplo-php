@@ -35,7 +35,7 @@ final class Effects
         Rt::emit($tenantId, $channel, $payload);
     }
 
-    /** Campaign memory (stage 4 wires the memory bank in; until then this is a no-op hook). */
+    /** Campaign memory: retained after the response (relational log, plus Hindsight when configured). */
     public static function remember(string $tenantId, array $ev): void
     {
         Jobs::defer(fn () => Memory::retain($tenantId, $ev));
