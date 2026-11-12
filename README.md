@@ -15,8 +15,8 @@ The port is happening in stages:
 | --- | --- | --- |
 | 1 | Schema, login (password, magic link, refresh, reset), workspace, team & permissions, notifications, workspace log, search, settings, plans | **done** |
 | 2 | Campaigns, leads (signed webhooks, respond/assign, audit), SLA timers & alerts, notes, team notes, insights & recommendations feed, live updates, retrospectives (PDF), scheduled sweeps, demo data | **done** |
-| 3 | Hosted pages (ZIP upload, rollback, custom domains, serving), inbound/outbound webhook settings, integrations, Telegram, Polar billing | next |
-| 4 | AI insights & chat, memory, MCP server/client, skills & plugins, Super Admin API | planned |
+| 3 | Hosted pages (ZIP upload, redeploy/rollback, pause, custom domains, serving), integrations catalogue, inbound/outbound webhooks, cross-tool SLA, AI provider settings, Telegram alerts with Acknowledge buttons, Polar billing webhooks, error monitoring (+ Sentry) | **done** |
+| 4 | AI insights, chat & morning brief, memory, MCP server/client, skills & plugins, Super Admin API | next |
 
 ## Run locally
 
@@ -64,6 +64,11 @@ customers.
 | `public/` | The web client (unchanged from the Node version) |
 | `app/Services/Sweeps.php` | Every time-based rule, as idempotent sweeps run each minute |
 | `app/Services/DemoSeeder.php` | The demo workspace |
+
+Hosted pages are served at `/sites/{subdomain}/` on the app host, at `{subdomain}.{PAGES_BASE_DOMAIN}`, and on verified
+custom domains (point a CNAME at the page's host). Requests for any host other than the app's own go to Laravel
+(see `docker/vhost.conf`), and `GET /api/caddy/ask` lets a Caddy on-demand-TLS front end issue certificates only for
+live pages and verified domains.
 
 Live updates: the browser keeps its `EventSource` channels; each request returns the events since its last event id
 and closes, and the browser reconnects a few seconds later. No PHP worker is held open.

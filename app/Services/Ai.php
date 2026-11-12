@@ -13,4 +13,10 @@ final class Ai
     {
         return null;
     }
+
+    /** Whether a workspace's own key works (stage 4 makes the real call). */
+    public static function verifyProvider(string $provider, ?string $model, string $apiKey): bool
+    {
+        return false;
+    }
 }

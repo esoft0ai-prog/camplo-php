@@ -26,6 +26,7 @@ class RawController
 
     private static function ingestResponse(array $r)
     {
+        \App\Support\IngestStats::record($r['status'] === 201);
         return response()->json($r['status'] === 201 ? ['ok' => true, 'lead_id' => $r['leadId']] : ['ok' => false], $r['status']);
     }
 
@@ -61,6 +62,64 @@ class RawController
         }
 
         return redirect('/#/acknowledge?token='.rawurlencode($token), 302);
+    }
+
+    public function polar(Request $r)
+    {
+        $raw = $r->getContent();
+        if (! \App\Services\Billing::verifyPolarSignature($raw, $r->header('webhook-id'), $r->header('webhook-timestamp'), $r->header('webhook-signature'))) {
+            return response()->json(['ok' => false], 401);
+        }
+
+        return \App\Services\Billing::handlePolarEvent(json_decode($raw, true) ?: []);
+    }
+
+    /** Telegram webhooks: the Camplo-wide bot, then per-workspace bots; both carry Telegram's secret_token header. */
+    public function telegram(Request $r, ?string $tenantId = null)
+    {
+        $scope = $tenantId ?? 'global';
+        if (! Crypto::safeEqual((string) $r->header('X-Telegram-Bot-Api-Secret-Token'), \App\Services\Telegram::webhookSecretFor($scope))) {
+            return response()->json(['ok' => false], 401);
+        }
+        \App\Services\Telegram::handleUpdate($scope, $r->json()->all());
+
+        return ['ok' => true];
+    }
+
+    /** Browser error reports from the app and the Super Admin console (public, rate-limited, size-capped). */
+    public function clientError(Request $r)
+    {
+        if (strlen($r->getContent()) > 32768) {
+            return response()->json(['ok' => false], 413);
+        }
+        $key = 'client-err:'.sha1((string) $r->ip());
+        \Illuminate\Support\Facades\Cache::add($key, 0, 60);
+        if (\Illuminate\Support\Facades\Cache::increment($key) > 30) {
+            return response()->json(['ok' => false], 429);
+        }
+        $b = $r->json()->all();
+        $message = is_string($b['message'] ?? null) ? mb_substr($b['message'], 0, 2000) : '';
+        if ($message === '') {
+            return response()->json(['ok' => false], 400);
+        }
+        $who = null;
+        try {
+            ctx()->resolve();
+            $who = ctx()->user;
+        } catch (\Throwable) {
+        }
+        $route = null;
+        if (is_string($b['url'] ?? null) && ($u = parse_url($b['url']))) {
+            $route = isset($u['fragment']) ? ($u['path'] ?? '/').'#'.explode('?', $u['fragment'])[0] : ($u['path'] ?? '/');
+        }
+        \App\Support\Errors::capture($message, [
+            'source' => ($b['source'] ?? '') === 'admin' ? 'admin_client' : 'client', 'route' => $route, 'type' => 'BrowserError',
+            'stack' => is_string($b['stack'] ?? null) ? mb_substr($b['stack'], 0, 8000) : null,
+            'userId' => $who->id ?? null, 'tenantId' => $who->tenant_id ?? null,
+            'context' => ['userAgent' => mb_substr(is_string($b['userAgent'] ?? null) ? $b['userAgent'] : (string) $r->userAgent(), 0, 300)],
+        ]);
+
+        return response()->noContent();
     }
 
     public function cron(Request $r)

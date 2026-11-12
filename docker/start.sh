@@ -3,6 +3,11 @@
 set -e
 cd /var/www/html
 
+# The app's own host name (everything else is a hosted page). Apache reads it as ${CAMPLO_APP_HOST}.
+APP_HOST=$(printf '%s' "${APP_URL:-https://${RENDER_EXTERNAL_HOSTNAME:-localhost}}" | sed -E 's#^[a-z]+://##; s#[:/].*$##')
+echo "export CAMPLO_APP_HOST=${APP_HOST}" >> /etc/apache2/envvars
+export APP_URL="${APP_URL:-${RENDER_EXTERNAL_URL:-}}"
+
 sed -ri "s/^Listen .*/Listen ${PORT:-10000}/" /etc/apache2/ports.conf
 sed -ri "s/<VirtualHost \*:[0-9]+>/<VirtualHost *:${PORT:-10000}>/" /etc/apache2/sites-available/000-default.conf
 

@@ -65,4 +65,12 @@ abstract class TestCase extends BaseTestCase
 
         return null;
     }
+
+    /** A GET that keeps the URL exactly as given (the test client trims trailing slashes). */
+    protected function rawGet(string $url): TestResponse
+    {
+        $response = $this->app->make(\Illuminate\Contracts\Http\Kernel::class)->handle(\Illuminate\Http\Request::create($url, 'GET'));
+
+        return TestResponse::fromBaseResponse($response);
+    }
 }

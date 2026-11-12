@@ -30,6 +30,8 @@ final class Sweeps
                 'sla' => fn () => self::sla(), 'webhooks' => fn () => self::webhooks(), 'team-notes' => fn () => NoteService::expireTeamNotes(),
                 'digest' => fn () => self::digest(), 'early-warning' => fn () => self::earlyWarning(), 'rollback' => fn () => self::rollbackCleanup(),
                 'suspension' => fn () => self::suspension(), 'campaign-status' => fn () => self::campaignStatus(), 'rt-prune' => fn () => Rt::prune(),
+                // every 30 minutes
+                'cross-tool' => fn () => Cache::add('sweep:cross-tool', 1, 1800) ? CrossToolService::check() : 'not due',
             ] as $label => $fn) {
                 try {
                     $done[$label] = $fn();

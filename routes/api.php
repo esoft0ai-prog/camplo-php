@@ -44,6 +44,11 @@ Route::post('/v1/hooks/{hookId}', [R::class, 'hook']);
 Route::post('/v1/lifecycle/{integrationId}/{token}', [R::class, 'lifecycle']);
 Route::get('/acknowledge/{token}', [R::class, 'acknowledgeLink']);
 Route::get('/cron', [R::class, 'cron']);
+Route::post('/polar/webhook', [R::class, 'polar']);
+Route::post('/telegram/webhook', [R::class, 'telegram']);
+Route::post('/telegram/{tenantId}', [R::class, 'telegram'])->where('tenantId', $uuid);
+Route::post('/monitor/client-error', [R::class, 'clientError']);
+Route::get('/caddy/ask', [\App\Http\Controllers\SiteController::class, 'caddyAsk']);
 Route::get('/rt/workspace/{name}', [R::class, 'rt'])->where('name', '[a-z-]+');
 
 Route::middleware('authed')->group(function () {
@@ -81,6 +86,25 @@ Route::middleware('authed')->group(function () {
     Route::patch('/settings', [W::class, 'patchSettings']);
     Route::get('/settings/notifications', [W::class, 'notificationSettings']);
     Route::patch('/settings/notifications', [W::class, 'patchNotificationSettings']);
+
+    // -------------------------------------------------------------- integrations, webhooks, AI provider, Telegram
+    Route::get('/integrations', [\App\Http\Controllers\SettingsController::class, 'integrations']);
+    Route::post('/integrations/ai/verify', [\App\Http\Controllers\SettingsController::class, 'verifyAi']);
+    Route::post('/integrations/{provider}/connect', [\App\Http\Controllers\SettingsController::class, 'connect'])->where('provider', '[a-z_]+');
+    Route::post('/integrations/{provider}/verify', [\App\Http\Controllers\SettingsController::class, 'verify'])->where('provider', '[a-z_]+');
+    Route::delete('/integrations/{provider}', [\App\Http\Controllers\SettingsController::class, 'disconnect'])->where('provider', '[a-z_]+');
+    Route::get('/webhooks/inbound', [\App\Http\Controllers\SettingsController::class, 'inbound']);
+    Route::post('/webhooks/inbound', [\App\Http\Controllers\SettingsController::class, 'createInbound']);
+    Route::delete('/webhooks/inbound/{id}', [\App\Http\Controllers\SettingsController::class, 'deleteInbound']);
+    Route::get('/webhooks/outbound', [\App\Http\Controllers\SettingsController::class, 'outbound']);
+    Route::post('/webhooks/outbound', [\App\Http\Controllers\SettingsController::class, 'createOutbound']);
+    Route::delete('/webhooks/outbound/{id}', [\App\Http\Controllers\SettingsController::class, 'deleteOutbound']);
+    Route::get('/settings/ai-provider', [\App\Http\Controllers\SettingsController::class, 'aiProvider']);
+    Route::patch('/settings/ai-provider', [\App\Http\Controllers\SettingsController::class, 'patchAiProvider']);
+    Route::get('/settings/telegram', [\App\Http\Controllers\SettingsController::class, 'telegram']);
+    Route::patch('/settings/telegram', [\App\Http\Controllers\SettingsController::class, 'patchTelegram']);
+    Route::post('/settings/telegram/verify', [\App\Http\Controllers\SettingsController::class, 'verifyTelegram']);
+    Route::delete('/settings/telegram', [\App\Http\Controllers\SettingsController::class, 'disconnectTelegram']);
 
     // -------------------------------------------------------------- campaigns
     Route::get('/campaigns', [C::class, 'index']);
@@ -162,14 +186,29 @@ Route::middleware('authed')->group(function () {
     Route::delete('/chat/history', [I::class, 'chatClear']);
     Route::get('/chat/suggestions', [I::class, 'chatSuggestions']);
 
-    // -------------------------------------------------------------- pages (read side; uploads arrive in stage 3)
+    // -------------------------------------------------------------- pages (also under /deployments, the ADL name)
+    Route::post('/pages/upload', [P::class, 'upload']);
+    Route::post('/deployments', [P::class, 'upload']);
+    Route::get('/pages/upload/{id}/status', [P::class, 'uploadStatus']);
     foreach (['pages', 'deployments'] as $res) {
         Route::get("/{$res}", [P::class, 'index']);
         Route::get("/{$res}/{id}", [P::class, 'show']);
+        Route::patch("/{$res}/{id}", [P::class, 'update']);
+        Route::delete("/{$res}/{id}", [P::class, 'destroy']);
+        Route::post("/{$res}/{id}/redeploy", [P::class, 'redeploy']);
+        Route::post("/{$res}/{id}/rollback", [P::class, 'rollback']);
         Route::get("/{$res}/{id}/analytics", [P::class, 'analytics']);
         Route::get("/{$res}/{id}/webhook-health", [P::class, 'webhookHealth']);
         Route::post("/{$res}/{id}/webhook/test", [P::class, 'webhookTest']);
     }
+    Route::post('/pages/{id}/pause', [P::class, 'pause']);
+    Route::post('/pages/{id}/unpause', [P::class, 'unpause']);
+    Route::post('/pages/{id}/archive', [P::class, 'archive']);
+    Route::post('/pages/{id}/domain', [P::class, 'addPageDomain']);
+    Route::get('/domains', [P::class, 'domains']);
+    Route::post('/domains', [P::class, 'addDomain']);
+    Route::post('/domains/{id}/verify', [P::class, 'verifyDomain']);
+    Route::delete('/domains/{id}', [P::class, 'removeDomain']);
 });
 
 Route::any('/{any}', fn () => response()->json(['code' => 'NOT_FOUND', 'message' => 'Not found.'], 404))->where('any', '.*');

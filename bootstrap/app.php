@@ -21,6 +21,8 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias(['authed' => Authed::class]);
+        // Custom domains and page subdomains are answered before any app route.
+        $middleware->prepend(\App\Http\Middleware\HostedSites::class);
         $middleware->api(prepend: [ApiHeaders::class]);
         // Render (and most hosts) terminate TLS at a proxy.
         $middleware->trustProxies(at: '*');
@@ -29,6 +31,12 @@ return Application::configure(basePath: dirname(__DIR__))
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->dontReport([ApiException::class]);
+        // Unexpected errors are grouped in error_events (Super Admin → Errors) and forwarded to Sentry when configured.
+        $exceptions->report(function (Throwable $e) {
+            $r = request();
+            $user = app()->bound(\App\Support\Ctx::class) ? app(\App\Support\Ctx::class)->user : null;
+            \App\Support\Errors::capture($e, ['source' => 'server', 'route' => $r ? $r->method().' /'.ltrim($r->path(), '/') : null, 'userId' => $user->id ?? null, 'tenantId' => $user->tenant_id ?? null]);
+        });
         $isApi = fn (Request $r) => $r->is('api/*') || $r->is('api') || $r->expectsJson();
         $exceptions->render(function (ApiException $e) {
             return response()->json($e->toArray(), $e->status);

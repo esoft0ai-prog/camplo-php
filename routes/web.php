@@ -6,6 +6,9 @@ use Illuminate\Support\Facades\Route;
  * The single-page web client lives in public/ (index.html, app.js, styles). Any path that is not a file or an API
  * route gets the app shell, like the Node version did.
  */
+// Hosted landing pages on the app host.
+Route::get('/sites/{subdomain}/{path?}', [\App\Http\Controllers\SiteController::class, 'serve'])->where(['subdomain' => '[a-z0-9-]+', 'path' => '.*']);
+
 Route::fallback(function () {
     return response()->file(public_path('index.html'), ['Content-Type' => 'text/html; charset=utf-8', 'Cache-Control' => 'no-cache']);
 });
@@ -14,4 +17,4 @@ Route::fallback(function () {
 Route::get('/admin', fn () => response()->file(public_path('admin.html'), ['Content-Type' => 'text/html; charset=utf-8', 'Cache-Control' => 'no-cache']));
 Route::get('/docs', fn (\Illuminate\Http\Request $r) => str_ends_with($r->getPathInfo(), '/')
     ? response()->file(public_path('docs/index.html'), ['Content-Type' => 'text/html; charset=utf-8'])
-    : redirect('/docs/', 301));
+    : new \Illuminate\Http\RedirectResponse('/docs/', 301));
