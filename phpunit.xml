@@ -31,6 +31,10 @@
         <env name="DB_DATABASE" value="camplo_test"/>
         <env name="DB_URL" value=""/>
         <env name="MAIL_MAILER" value="array"/>
+        <env name="ALLOW_DIRECT_PLAN_CHANGE" value="false"/>
+        <env name="AUTO_ACTIVATE" value="true"/>
+        <env name="ENCRYPTION_KEY" value=""/>
+        <env name="JWT_SECRET" value="test-only-jwt-secret"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>
         <env name="PULSE_ENABLED" value="false"/>
