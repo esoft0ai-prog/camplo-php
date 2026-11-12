@@ -20,6 +20,12 @@ final class Fmt
         return $d->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d\TH:i:s.v\Z');
     }
 
+    /** Epoch milliseconds → ISO string with milliseconds. */
+    public static function isoMs(int $ms): string
+    {
+        return gmdate('Y-m-d\\TH:i:s', intdiv($ms, 1000)).'.'.str_pad((string) ($ms % 1000), 3, '0', STR_PAD_LEFT).'Z';
+    }
+
     public static function now(): string
     {
         return self::iso(new DateTimeImmutable('now'));

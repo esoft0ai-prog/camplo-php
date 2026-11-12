@@ -14,8 +14,8 @@ The port is happening in stages:
 | Stage | Scope | State |
 | --- | --- | --- |
 | 1 | Schema, login (password, magic link, refresh, reset), workspace, team & permissions, notifications, workspace log, search, settings, plans | **done** |
-| 2 | Campaigns, leads, SLA timers & alerts, notes, team notes, scheduled sweeps, demo data | next |
-| 3 | Hosted pages (ZIP upload, rollback, custom domains), inbound/outbound webhooks, integrations, Telegram, Polar billing | planned |
+| 2 | Campaigns, leads (signed webhooks, respond/assign, audit), SLA timers & alerts, notes, team notes, insights & recommendations feed, live updates, retrospectives (PDF), scheduled sweeps, demo data | **done** |
+| 3 | Hosted pages (ZIP upload, rollback, custom domains, serving), inbound/outbound webhook settings, integrations, Telegram, Polar billing | next |
 | 4 | AI insights & chat, memory, MCP server/client, skills & plugins, Super Admin API | planned |
 
 ## Run locally
@@ -28,6 +28,12 @@ cp .env.example .env          # set DB_* (or DATABASE_URL)
 php artisan migrate
 php artisan serve             # http://localhost:8000
 ```
+
+Demo workspace (on an empty database): `php artisan camplo:seed-demo` → sign in as `marcus@northbeam.demo` / `camplo-demo`.
+
+Background rules (SLA alerts, daily digests, webhook health, early-warning windows, cleanup) run every minute via
+`php artisan schedule:run` (the Docker image runs it for you), or once with `php artisan camplo:sweep`. An external
+cron can call `GET /api/cron` with `Authorization: Bearer $CRON_SECRET` instead.
 
 Tests (need a `camplo_test` database; connection settings are in `phpunit.xml`):
 
@@ -56,3 +62,8 @@ customers.
 | `app/Http/Controllers` | Thin controllers: validate input, call a service |
 | `routes/api.php` | Every `/api` endpoint |
 | `public/` | The web client (unchanged from the Node version) |
+| `app/Services/Sweeps.php` | Every time-based rule, as idempotent sweeps run each minute |
+| `app/Services/DemoSeeder.php` | The demo workspace |
+
+Live updates: the browser keeps its `EventSource` channels; each request returns the events since its last event id
+and closes, and the browser reconnects a few seconds later. No PHP worker is held open.

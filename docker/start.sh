@@ -9,6 +9,7 @@ sed -ri "s/<VirtualHost \*:[0-9]+>/<VirtualHost *:${PORT:-10000}>/" /etc/apache2
 php artisan config:cache
 php artisan route:cache
 php artisan migrate --force
+php artisan camplo:seed-demo || true
 
 # Background jobs (SLA alerts, digests, sweeps) every minute, in-process — no separate worker needed.
 ( while true; do php artisan schedule:run >/dev/null 2>&1 || true; sleep 60; done ) &

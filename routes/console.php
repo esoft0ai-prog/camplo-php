@@ -1,8 +1,6 @@
 <?php
 
-use Illuminate\Foundation\Inspiring;
-use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Schedule;
 
-Artisan::command('inspire', function () {
-    $this->comment(Inspiring::quote());
-})->purpose('Display an inspiring quote');
+// Every time-based rule (SLA alerts, digests, webhook health, early warning, cleanup) — idempotent.
+Schedule::command('camplo:sweep')->everyMinute()->withoutOverlapping(10);

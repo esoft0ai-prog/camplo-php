@@ -92,4 +92,13 @@ final class Paginate
 
         return -1;
     }
+
+    /** Wrap a result that already paginated in SQL ({ <field>: rows, has_more, next_cursor, ...extras }). */
+    public static function envelope(array $r, string $field): array
+    {
+        $data = $r[$field];
+        unset($r[$field]);
+
+        return [...$r, 'data' => $data, 'has_more' => $r['has_more'], 'next_cursor' => $r['next_cursor'] ? self::encode($r['next_cursor']) : null];
+    }
 }

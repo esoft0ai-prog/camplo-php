@@ -6,10 +6,19 @@
  */
 
 use App\Http\Controllers\AuthController as A;
+use App\Http\Controllers\CampaignController as C;
+use App\Http\Controllers\IntelController as I;
+use App\Http\Controllers\LeadController as L;
+use App\Http\Controllers\PageController as P;
+use App\Http\Controllers\RawController as R;
+use App\Http\Controllers\SlaController as S;
 use App\Http\Controllers\WorkspaceController as W;
 use Illuminate\Support\Facades\Route;
 
-Route::pattern('id', '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}');
+$uuid = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}';
+foreach (['id', 'noteId', 'leadId'] as $p) {
+    Route::pattern($p, $uuid);
+}
 
 Route::get('/health', [W::class, 'health']);
 Route::get('/public/platform', [W::class, 'publicPlatform']);
@@ -25,6 +34,17 @@ Route::post('/auth/refresh', [A::class, 'refresh']);
 Route::post('/auth/forgot-password', [A::class, 'forgot']);
 Route::post('/auth/reset-password', [A::class, 'reset']);
 Route::post('/team/invitations/accept', [A::class, 'acceptInvitation']);
+Route::get('/public/campaigns/{shareToken}', [C::class, 'publicCampaign']);
+Route::get('/leads/acknowledge/preview', [L::class, 'ackPreview']);
+Route::post('/leads/acknowledge', [L::class, 'acknowledge']);
+
+// ------------------------------------------------------------------ raw endpoints (signed webhooks, links, cron, live updates)
+Route::post('/v1/ingest/{tenantId}/{deploymentId}', [R::class, 'ingest']);
+Route::post('/v1/hooks/{hookId}', [R::class, 'hook']);
+Route::post('/v1/lifecycle/{integrationId}/{token}', [R::class, 'lifecycle']);
+Route::get('/acknowledge/{token}', [R::class, 'acknowledgeLink']);
+Route::get('/cron', [R::class, 'cron']);
+Route::get('/rt/workspace/{name}', [R::class, 'rt'])->where('name', '[a-z-]+');
 
 Route::middleware('authed')->group(function () {
     Route::get('/auth/me', [A::class, 'me']);
@@ -61,6 +81,95 @@ Route::middleware('authed')->group(function () {
     Route::patch('/settings', [W::class, 'patchSettings']);
     Route::get('/settings/notifications', [W::class, 'notificationSettings']);
     Route::patch('/settings/notifications', [W::class, 'patchNotificationSettings']);
+
+    // -------------------------------------------------------------- campaigns
+    Route::get('/campaigns', [C::class, 'index']);
+    Route::post('/campaigns', [C::class, 'store']);
+    Route::get('/campaigns/{id}', [C::class, 'show']);
+    Route::patch('/campaigns/{id}', [C::class, 'update']);
+    Route::delete('/campaigns/{id}', [C::class, 'destroy']);
+    Route::post('/campaigns/{id}/complete', [C::class, 'complete']);
+    Route::post('/campaigns/{id}/pin', [C::class, 'pin']);
+    Route::delete('/campaigns/{id}/pin', [C::class, 'unpin']);
+    Route::get('/campaigns/{id}/health', [C::class, 'health']);
+    Route::get('/campaigns/{id}/speed-to-lead', [C::class, 'speed']);
+    Route::get('/campaigns/{id}/cpl', [C::class, 'cpl']);
+    Route::get('/campaigns/{id}/logs', [C::class, 'logs']);
+    Route::get('/campaigns/{id}/memory', [C::class, 'memory']);
+    Route::get('/campaigns/{id}/retrospective/status', [C::class, 'retroStatus']);
+    Route::get('/campaigns/{id}/retrospective/pdf', [C::class, 'retroPdf']);
+    Route::get('/campaigns/{id}/retrospective', [C::class, 'retro']);
+    Route::get('/campaigns/{id}/share-link', [C::class, 'shareGet']);
+    Route::post('/campaigns/{id}/share-link', [C::class, 'shareCreate']);
+    Route::delete('/campaigns/{id}/share-link', [C::class, 'shareRevoke']);
+    Route::get('/campaigns/{id}/pages', [C::class, 'pages']);
+    Route::get('/campaigns/{id}/leads', [C::class, 'leads']);
+    Route::get('/campaigns/{id}/insights', [C::class, 'insights']);
+    Route::get('/campaigns/{id}/recommendations', [C::class, 'recommendations']);
+    Route::get('/campaigns/{id}/notes', [C::class, 'notes']);
+    Route::post('/campaigns/{id}/notes', [C::class, 'addNote']);
+    Route::patch('/campaigns/{id}/notes/{noteId}', [C::class, 'editNote']);
+    Route::get('/campaigns/{id}/meeting-notes', [C::class, 'meetingNotes']);
+    Route::post('/campaigns/{id}/meeting-notes', [C::class, 'addMeetingNote']);
+    Route::get('/campaigns/{id}/team-notes', [C::class, 'teamNotes']);
+    Route::get('/campaigns/{id}/lifecycle/summary', [C::class, 'lifecycleSummary']);
+    Route::get('/campaigns/{id}/sla', [C::class, 'sla']);
+    Route::get('/campaigns/{id}/sla/trend', [C::class, 'slaTrend']);
+    Route::get('/campaigns/{id}/sla/team', [C::class, 'slaTeam']);
+
+    // -------------------------------------------------------------- leads + notes
+    Route::get('/leads', [L::class, 'index']);
+    Route::get('/leads/{id}', [L::class, 'show']);
+    Route::post('/leads/{id}/respond', [L::class, 'respond']);
+    Route::post('/leads/{id}/assign', [L::class, 'assign']);
+    Route::get('/leads/{id}/lifecycle', [L::class, 'lifecycle']);
+    Route::get('/leads/{id}/notes', [L::class, 'notes']);
+    Route::post('/leads/{id}/notes', [L::class, 'addNote']);
+    Route::patch('/leads/{id}/notes/{noteId}', [L::class, 'editNote']);
+    Route::get('/leads/{id}/audit', [L::class, 'audit']);
+    Route::get('/leads/{id}/team-notes', [L::class, 'teamNotes']);
+    Route::patch('/notes/{id}', [L::class, 'editAnyNote']);
+
+    // -------------------------------------------------------------- SLA
+    Route::get('/sla/live', [S::class, 'live']);
+    Route::get('/sla/overdue', [S::class, 'overdue']);
+    Route::get('/sla/trend', [S::class, 'trend']);
+    Route::get('/sla/team', [S::class, 'team']);
+    Route::get('/sla/cross-tool', [S::class, 'crossTool']);
+    Route::post('/sla/notify/{leadId}', [S::class, 'notify']);
+    Route::get('/sla/config', [S::class, 'config']);
+    Route::patch('/sla/config', [S::class, 'patchConfig']);
+    Route::get('/sla/config/cross-tool', [S::class, 'crossToolConfig']);
+    Route::patch('/sla/config/cross-tool', [S::class, 'patchCrossTool']);
+
+    // -------------------------------------------------------------- team notes
+    Route::get('/team-notes', [S::class, 'teamNotes']);
+    Route::post('/team-notes', [S::class, 'createTeamNote']);
+    Route::patch('/team-notes/{id}', [S::class, 'editTeamNote']);
+    Route::post('/team-notes/{id}/read', [S::class, 'readTeamNote']);
+    Route::post('/team-notes/{id}/archive', [S::class, 'archiveTeamNote']);
+    Route::post('/team-notes/{id}/acknowledge', [S::class, 'acknowledgeTeamNote']);
+
+    // -------------------------------------------------------------- insights, recommendations, chat history
+    Route::get('/insights', [I::class, 'insights']);
+    Route::get('/insights/{id}', [I::class, 'insight']);
+    Route::post('/insights/{id}/dismiss', [I::class, 'dismissInsight']);
+    Route::get('/recommendations', [I::class, 'recommendations']);
+    Route::get('/recommendations/{id}', [I::class, 'recommendation']);
+    Route::post('/recommendations/{id}/dismiss', [I::class, 'dismissRecommendation']);
+    Route::post('/recommendations/{id}/apply', [I::class, 'applyRecommendation']);
+    Route::get('/chat/history', [I::class, 'chatHistory']);
+    Route::delete('/chat/history', [I::class, 'chatClear']);
+    Route::get('/chat/suggestions', [I::class, 'chatSuggestions']);
+
+    // -------------------------------------------------------------- pages (read side; uploads arrive in stage 3)
+    foreach (['pages', 'deployments'] as $res) {
+        Route::get("/{$res}", [P::class, 'index']);
+        Route::get("/{$res}/{id}", [P::class, 'show']);
+        Route::get("/{$res}/{id}/analytics", [P::class, 'analytics']);
+        Route::get("/{$res}/{id}/webhook-health", [P::class, 'webhookHealth']);
+        Route::post("/{$res}/{id}/webhook/test", [P::class, 'webhookTest']);
+    }
 });
 
 Route::any('/{any}', fn () => response()->json(['code' => 'NOT_FOUND', 'message' => 'Not found.'], 404))->where('any', '.*');

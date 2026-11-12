@@ -20,7 +20,7 @@ $num = static fn (?string $v, float|int $d) => ($v !== null && $v !== '' && is_n
 return [
     'env' => env('APP_ENV', 'production'),
     'app_url' => rtrim((string) (env('APP_URL') ?: env('RENDER_EXTERNAL_URL') ?: 'http://localhost:8000'), '/'),
-    'seed_demo' => env('SEED_DEMO', 'true') !== 'false',
+    'seed_demo' => filter_var(env('SEED_DEMO', true), FILTER_VALIDATE_BOOL, FILTER_NULL_ON_FAILURE) ?? true,
 
     'jwt_secret' => (string) env('JWT_SECRET', 'dev-only-insecure-jwt-secret-change-me'),
     'access_token_ttl' => (int) $num(env('ACCESS_TOKEN_TTL_SECONDS'), 15 * 60),
@@ -88,8 +88,8 @@ return [
         'watchtower' => $env('POLAR_CHECKOUT_URL_WATCHTOWER'),
         'agency' => $env('POLAR_CHECKOUT_URL_AGENCY'),
     ],
-    'allow_direct_plan_change' => env('ALLOW_DIRECT_PLAN_CHANGE') === 'true' || env('ALLOW_DIRECT_PLAN_CHANGE') === true,
-    'auto_activate' => env('AUTO_ACTIVATE') === 'true' || env('AUTO_ACTIVATE') === true,
+    'allow_direct_plan_change' => filter_var(env('ALLOW_DIRECT_PLAN_CHANGE', false), FILTER_VALIDATE_BOOL),
+    'auto_activate' => filter_var(env('AUTO_ACTIVATE', false), FILTER_VALIDATE_BOOL),
 
     'telegram_bot_token' => $env('TELEGRAM_BOT_TOKEN'),
     'telegram_webhook_secret' => $env('TELEGRAM_WEBHOOK_SECRET'),
