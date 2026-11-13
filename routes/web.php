@@ -13,10 +13,13 @@ use Illuminate\Support\Facades\Route;
 Route::get('/sites/{subdomain}/{path?}', [SiteController::class, 'serve'])->where(['subdomain' => '[a-z0-9-]+', 'path' => '.*']);
 
 // The HTML shells use relative asset paths; <base> points them at the app's root, which may be a sub-folder (/camplo).
-$shell = fn (Request $r, string $file) => response(
-    preg_replace('/<head>/', '<head>'."\n  ".'<base href="'.e($r->getBaseUrl()).'/" />', file_get_contents(public_path($file)), 1),
-    200, ['Content-Type' => 'text/html; charset=utf-8', 'Cache-Control' => 'no-cache'],
-);
+// Scripts and styles get a ?v=<modified time> stamp, so a browser never keeps running an outdated copy after an update.
+$shell = function (Request $r, string $file) {
+    $html = preg_replace('/<head>/', '<head>'."\n  ".'<base href="'.e($r->getBaseUrl()).'/" />', file_get_contents(public_path($file)), 1);
+    $html = preg_replace_callback('/(src|href)="([\w-]+\.(?:js|css))"/', fn ($m) => is_file(public_path($m[2])) ? "{$m[1]}=\"{$m[2]}?v=".filemtime(public_path($m[2])).'"' : $m[0], $html);
+
+    return response($html, 200, ['Content-Type' => 'text/html; charset=utf-8', 'Cache-Control' => 'no-cache, no-store']);
+};
 
 Route::fallback(fn (Request $r) => $shell($r, 'index.html'));
 

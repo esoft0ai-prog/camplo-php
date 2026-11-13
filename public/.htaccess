@@ -5,6 +5,9 @@
 
     RewriteEngine On
 
+    # The app shell is always served by Laravel (base path + versioned scripts), never as a static index.html.
+    DirectoryIndex index.php
+
     # Handle Authorization Header
     RewriteCond %{HTTP:Authorization} .
     RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
