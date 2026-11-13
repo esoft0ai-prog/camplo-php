@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Support\Crypto;
+use App\Support\Sql;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -34,9 +35,7 @@ final class DemoSeeder
 
     private static function at(float $t): string
     {
-        $ms = (int) round($t * 1000);
-
-        return gmdate('Y-m-d H:i:s', intdiv($ms, 1000)).'.'.str_pad((string) ($ms % 1000), 3, '0', STR_PAD_LEFT).'+00';
+        return Sql::tsMs((int) round($t * 1000));
     }
 
     private static function day(float $d): string
@@ -46,7 +45,7 @@ final class DemoSeeder
 
     private static function id(string $table, array $row): string
     {
-        return DB::table($table)->insertGetId($row);
+        return Sql::insertId($table, $row);
     }
 
     public static function run(): string

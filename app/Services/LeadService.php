@@ -7,6 +7,7 @@ use App\Support\Crypto;
 use App\Support\Ctx;
 use App\Support\Fail;
 use App\Support\Fmt;
+use App\Support\Sql;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -61,7 +62,7 @@ final class LeadService
         $thr = (int) $t->sla_threshold_minutes;
         $vip = $t->vip_lead_enabled ? (int) $t->vip_sla_threshold_minutes : $thr;
 
-        return ["leads.status = 'not_responded' and leads.received_at < now() - (case when leads.vip then ?::int else ?::int end) * interval '1 minute'", [$vip, $thr]];
+        return [Sql::q("leads.status = 'not_responded' and leads.received_at < now() - (case when leads.vip then ?::int else ?::int end) * interval '1 minute'"), [$vip, $thr]];
     }
 
     private static function viewer(Ctx $ctx): array
@@ -95,7 +96,7 @@ final class LeadService
             }
             if (! empty($f['q'])) {
                 $like = '%'.$f['q'].'%';
-                $q->where(fn ($w) => $w->where('leads.full_name', 'ilike', $like)->orWhere('leads.email', 'ilike', $like));
+                $q->where(fn ($w) => $w->whereRaw('lower(leads.full_name) like lower(?)', [$like])->orWhereRaw('lower(leads.email) like lower(?)', [$like]));
             }
         };
         [$od, $odB] = self::overdueSql($ctx->tenant);
@@ -118,8 +119,8 @@ final class LeadService
         $page = $rows->slice(0, $limit)->values();
         $sq = DB::table('leads');
         $base($sq);
-        $sum = $sq->selectRaw("count(*) as total, count(*) filter (where leads.status = 'responded') as responded, count(*) filter (where {$od}) as overdue,
-            avg(extract(epoch from (leads.responded_at - leads.received_at))) filter (where leads.responded_at is not null) as avg", $odB)->first();
+        $sum = $sq->selectRaw(Sql::q("count(*) as total, count(*) filter (where leads.status = 'responded') as responded, count(*) filter (where {$od}) as overdue,
+            avg(extract(epoch from (leads.responded_at - leads.received_at))) filter (where leads.responded_at is not null) as avg"), $odB)->first();
         $v = self::viewer($ctx);
 
         return [
@@ -176,10 +177,8 @@ final class LeadService
     private static function markResponded(object $l, string $userId): ?object
     {
         $claim = ! $l->assignee_id;
-        $sql = 'update leads set status = \'responded\', responded_at = now(), responded_by = ?'
-            .($claim ? ', assignee_id = ?, assignment_path = \'A\', claimed_at = now()' : '')
-            .' where id = ? and status = \'not_responded\' returning *';
-        $row = DB::selectOne($sql, $claim ? [$userId, $userId, $l->id] : [$userId, $l->id]);
+        $row = Sql::updateReturning('leads', "status = 'responded', responded_at = now(), responded_by = ?".($claim ? ", assignee_id = ?, assignment_path = 'A', claimed_at = now()" : ''),
+            $claim ? [$userId, $userId] : [$userId], "id = ? and status = 'not_responded'", [$l->id])[0] ?? null;
         if ($row && $claim) {
             DB::table('lead_assignment_history')->insert(['tenant_id' => $l->tenant_id, 'lead_id' => $l->id, 'to_assignee_id' => $userId, 'path' => 'A', 'actioned_by' => $userId, 'actioned_at' => $row->responded_at]);
         }
@@ -292,11 +291,11 @@ final class LeadService
     {
         CampaignService::load($ctx, $campaignId);
         $tot = DB::table('leads')->where('tenant_id', $ctx->tenantId)->where('campaign_id', $campaignId)
-            ->selectRaw("count(*) as total, count(*) filter (where has_external_lifecycle_events) as external, count(*) filter (where status = 'responded') as responded")->first();
+            ->selectRaw(Sql::q("count(*) as total, count(*) filter (where has_external_lifecycle_events) as external, count(*) filter (where status = 'responded') as responded"))->first();
         $scope = fn () => DB::table('lead_lifecycle_events as e')->join('leads', 'leads.id', '=', 'e.lead_id')->where('e.tenant_id', $ctx->tenantId)->where('leads.campaign_id', $campaignId);
         $bySource = $scope()->groupBy('e.source')->selectRaw('e.source, count(*) as events, count(distinct e.lead_id) as leads')->get();
         $stages = $scope()->where('e.source', '<>', 'camplo')->groupBy('e.event', 'e.source')
-            ->selectRaw('e.event, e.source, bool_or(e.is_milestone) as milestone, count(distinct e.lead_id) as leads')->orderByRaw('count(distinct e.lead_id) desc')->limit(12)->get();
+            ->selectRaw(Sql::q('e.event, e.source, bool_or(e.is_milestone) as milestone, count(distinct e.lead_id) as leads'))->orderByRaw('count(distinct e.lead_id) desc')->limit(12)->get();
         $last = $scope()->where('e.source', '<>', 'camplo')->max('e.event_timestamp');
         $total = (int) $tot->total;
         $external = (int) $tot->external;
@@ -395,7 +394,7 @@ final class LeadService
         if (Rules::hasFeature($tenant->plan, 'utm')) {
             $row += ['utm_source' => $d['utmSource'], 'utm_medium' => $d['utmMedium'], 'utm_campaign' => $d['utmCampaign'], 'utm_content' => $d['utmContent'], 'utm_term' => $d['utmTerm']];
         }
-        $id = DB::table('leads')->insertGetId($row);
+        $id = Sql::insertId('leads', $row);
         $lead = DB::table('leads')->where('id', $id)->first();
         self::addLifecycle($tenant->id, $id, 'Lead received', 'camplo', $lead->received_at);
         $lead = Plugins::runLeadPlugins($tenant, $lead);

@@ -1,6 +1,6 @@
 # Camplo (Laravel) — guidance for contributors and AI agents
 
-Laravel 13 / PHP 8.3 port of the Node Camplo app. PostgreSQL only.
+Laravel 13 / PHP 8.3 port of the Node Camplo app. Runs on PostgreSQL (Render) and MySQL 8 (local/WAMP).
 
 ## Non-negotiables
 
@@ -11,6 +11,11 @@ Laravel 13 / PHP 8.3 port of the Node Camplo app. PostgreSQL only.
 * **Secrets** are sealed with `Crypto::encrypt($value, $purpose)` and never returned to a client (use `Crypto::mask`).
 * **Schema changes** go in new Laravel migrations. Never edit `database/sql/*.sql` (they mirror what the Node app shipped).
 * SQL is parameterised; column names only come from code.
+* **Both databases.** Prefer the query builder. Raw SQL is written in PostgreSQL form and wrapped in `Sql::q()` (which
+  translates it for MySQL); use `Sql::insertId`, `Sql::updateReturning`, `Sql::locked` and `Sql::ts` instead of
+  `insertGetId`, `RETURNING`, advisory locks and literal timestamps. Cast boolean columns with `(bool)` when serialising
+  (MySQL returns 0/1). New schema migrations must work on both; for `database/sql` changes, regenerate the MySQL copy with
+  `php database/tools/pg2mysql.php`.
 * Never commit secrets — this repository is public.
 
 ## Layout
@@ -21,9 +26,10 @@ methods taking `Ctx`) → `app/Http/Controllers` (validate with `Input::get`, ca
 ## Commands
 
 ```bash
-php artisan test          # needs Postgres (see phpunit.xml)
+php artisan test          # Postgres (see phpunit.xml)
+DB_CONNECTION=mysql DB_PORT=3306 DB_USERNAME=root DB_PASSWORD= php artisan test   # MySQL
 php artisan migrate
 php artisan serve
 ```
 
-Run the tests before declaring work done, and add feature tests for new endpoints in `tests/Feature`.
+Run the tests on both databases before declaring work done, and add feature tests for new endpoints in `tests/Feature`.

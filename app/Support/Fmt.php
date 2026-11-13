@@ -31,10 +31,10 @@ final class Fmt
         return self::iso(new DateTimeImmutable('now'));
     }
 
-    /** A Postgres timestamptz literal for queries ("now" ± seconds). */
+    /** A timestamp literal for queries ("now" ± seconds), in the connected database's format. */
     public static function ts(int $offsetSeconds = 0): string
     {
-        return (new DateTimeImmutable('@'.(time() + $offsetSeconds)))->format('Y-m-d H:i:sP');
+        return Sql::ts(time() + $offsetSeconds);
     }
 
     public static function bool(mixed $v): ?bool

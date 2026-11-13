@@ -6,7 +6,7 @@ on:
   pull_request:
 
 jobs:
-  phpunit:
+  postgres:
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -30,3 +30,30 @@ jobs:
         env:
           DB_PORT: 5432
           DB_PASSWORD: postgres
+
+  mysql:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: camplo_test
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd "mysqladmin ping -proot" --health-interval 5s --health-timeout 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_mysql, zip, bcmath
+          coverage: none
+      - run: composer install --no-interaction --prefer-dist --no-progress
+      - run: cp .env.example .env
+      - run: php artisan test
+        env:
+          DB_CONNECTION: mysql
+          DB_PORT: 3306
+          DB_USERNAME: root
+          DB_PASSWORD: root

@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Domain\Rules;
 use App\Support\Errors;
 use App\Support\Fmt;
+use App\Support\Sql;
 use App\Support\Storage;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -72,7 +73,7 @@ final class Sweeps
         foreach (DB::table('tenants')->where('status', 'active')->where('urgent_alerts_enabled', true)->get() as $t) {
             $vip = $t->vip_lead_enabled ? (int) $t->vip_sla_threshold_minutes : (int) $t->sla_threshold_minutes;
             $due = DB::table('leads')->where('tenant_id', $t->id)->where('status', 'not_responded')->whereNull('sla_alert_sent_at')
-                ->whereRaw("received_at < now() - (case when vip then ?::int else ?::int end) * interval '1 minute'", [$vip, (int) $t->sla_threshold_minutes])->limit(50)->get();
+                ->whereRaw(Sql::q("received_at < now() - (case when vip then ?::int else ?::int end) * interval '1 minute'"), [$vip, (int) $t->sla_threshold_minutes])->limit(50)->get();
             foreach ($due as $l) {
                 SlaService::sendAlert($t, $l);
                 $n++;
@@ -127,7 +128,7 @@ final class Sweeps
         if ($open->isEmpty()) {
             return;
         }
-        $avg = DB::table('leads')->where('tenant_id', $t->id)->whereRaw("responded_at >= now() - interval '1 day'")->selectRaw('avg(extract(epoch from (responded_at - received_at))*1000) as ms')->value('ms');
+        $avg = DB::table('leads')->where('tenant_id', $t->id)->whereRaw(Sql::q("responded_at >= now() - interval '1 day'"))->selectRaw(Sql::q('avg(extract(epoch from (responded_at - received_at))*1000) as ms'))->value('ms');
         $lines = $open->map(fn ($l) => "• {$l->full_name} — ".($l->dep ?? 'webhook').' — waiting '.Rules::formatDuration(Rules::nowMs() - Rules::ms($l->received_at)))->all();
         Mailer::send(Mailer::dailySummary($t->notification_email, $lines, Rules::formatDuration($avg === null ? null : (float) $avg)));
     }
@@ -135,7 +136,7 @@ final class Sweeps
     /** Closes 72-hour early-warning windows that have run their course. */
     public static function earlyWarning(): int
     {
-        $rows = DB::select('update deployments set early_warning_active = false, updated_at = now() where early_warning_active = true and deployed_at < ? returning id, tenant_id', [Fmt::ts(-(int) config('camplo.early_warning_hours') * 3600)]);
+        $rows = Sql::updateReturning('deployments', 'early_warning_active = false, updated_at = now()', [], 'early_warning_active = true and deployed_at < ?', [Fmt::ts(-(int) config('camplo.early_warning_hours') * 3600)], 'id, tenant_id');
         foreach ($rows as $d) {
             Rt::emit($d->tenant_id, "page:{$d->id}:webhook", ['earlyWarningActive' => false]);
         }

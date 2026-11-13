@@ -41,9 +41,13 @@ final class Errors
             $ctx = isset($c['context']) ? json_encode($c['context']) : null;
             $tenant = isset($c['tenantId']) && Str::isUuid((string) $c['tenantId']) ? $c['tenantId'] : null;
             $user = isset($c['userId']) && Str::isUuid((string) $c['userId']) ? $c['userId'] : null;
-            DB::statement('insert into error_events (fingerprint, source, level, message, stack, route, tenant_id, user_id, context) values (?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb)
-                on conflict (fingerprint) do update set count = error_events.count + 1, last_seen_at = now(), resolved_at = null, stack = excluded.stack,
-                tenant_id = excluded.tenant_id, user_id = excluded.user_id, context = excluded.context',
+            DB::statement(Sql::mysql()
+                ? 'insert into error_events (fingerprint, source, level, message, stack, route, tenant_id, user_id, context) values (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    on duplicate key update count = count + 1, last_seen_at = now(3), resolved_at = null, stack = values(stack),
+                    tenant_id = values(tenant_id), user_id = values(user_id), context = values(context)'
+                : 'insert into error_events (fingerprint, source, level, message, stack, route, tenant_id, user_id, context) values (?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb)
+                    on conflict (fingerprint) do update set count = error_events.count + 1, last_seen_at = now(), resolved_at = null, stack = excluded.stack,
+                    tenant_id = excluded.tenant_id, user_id = excluded.user_id, context = excluded.context',
                 [self::fingerprint($source, $message, $route), $source, $level, mb_substr($message, 0, 4000), $stack ? mb_substr($stack, 0, 8000) : null, $route, $tenant, $user, $ctx]);
             self::toSentry($message, $stack, $type, $level, $route, $source, $tenant, $user, $c['context'] ?? []);
         } catch (Throwable $e) {

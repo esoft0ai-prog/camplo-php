@@ -7,6 +7,7 @@ use App\Support\Crypto;
 use App\Support\Ctx;
 use App\Support\Fail;
 use App\Support\Fmt;
+use App\Support\Sql;
 use App\Support\Storage;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Http\UploadedFile;
@@ -299,9 +300,9 @@ final class WorkspaceService
         $m = Metrics::avgResponseMs($ctx->tenantId, Fmt::ts(-30 * 86400), null, $mine);
         $thr = (int) $ctx->tenant->sla_threshold_minutes;
         $agg = DB::table('leads')->where('tenant_id', $ctx->tenantId)->where('assignee_id', $userId)->where('received_at', '>=', $week)
-            ->selectRaw("count(*) as assigned, count(*) filter (where status = 'responded') as responded,
-                count(*) filter (where coalesce(responded_at, now()) - received_at > ?::int * interval '1 minute') as breaches,
-                min(extract(epoch from (responded_at - received_at)) * 1000) filter (where responded_by = ?) as fastest", [$thr, $userId])->first();
+            ->selectRaw(Sql::q("count(*) as assigned, count(*) filter (where status = 'responded') as responded,
+                count(*) filter (where extract(epoch from (coalesce(responded_at, now()) - received_at)) > ?::int * 60) as breaches,
+                min(extract(epoch from (responded_at - received_at)) * 1000) filter (where responded_by = ?) as fastest"), [$thr, $userId])->first();
 
         return [
             'avgThisWeekMs' => $w['avgMs'], 'avg30dMs' => $m['avgMs'], 'respondedThisWeek' => $w['count'],
@@ -445,7 +446,7 @@ final class WorkspaceService
             DB::table('users')->where('id', $existing->id)->update(['removed_at' => null, 'joined_at' => null, 'role' => $role, 'invited_by' => $ctx->user->id, 'created_at' => now()]);
             $id = $existing->id;
         } else {
-            $id = DB::table('users')->insertGetId(['tenant_id' => $ctx->tenantId, 'email' => $e, 'name' => explode('@', $e)[0], 'role' => $role, 'invited_by' => $ctx->user->id]);
+            $id = Sql::insertId('users', ['tenant_id' => $ctx->tenantId, 'email' => $e, 'name' => explode('@', $e)[0], 'role' => $role, 'invited_by' => $ctx->user->id]);
         }
         $u = DB::table('users')->where('id', $id)->first();
         $token = self::sendInvite($ctx, $u);
@@ -513,15 +514,15 @@ final class WorkspaceService
             return ['campaigns' => [], 'leads' => [], 'pages' => []];
         }
         $like = '%'.addcslashes($term, '%_\\').'%';
-        $cs = DB::table('campaigns')->where('tenant_id', $ctx->tenantId)->where('name', 'ilike', $like)->limit(5)->get(['id', 'name', 'status']);
+        $cs = DB::table('campaigns')->where('tenant_id', $ctx->tenantId)->whereRaw('lower(name) like lower(?)', [$like])->limit(5)->get(['id', 'name', 'status']);
         $lq = DB::table('leads')->leftJoin('campaigns', 'campaigns.id', '=', 'leads.campaign_id')->where('leads.tenant_id', $ctx->tenantId)
-            ->where(fn ($w) => $w->where('leads.full_name', 'ilike', $like)->orWhere('leads.email', 'ilike', $like));
+            ->where(fn ($w) => $w->whereRaw('lower(leads.full_name) like lower(?)', [$like])->orWhereRaw('lower(leads.email) like lower(?)', [$like]));
         if ($ctx->role === 'member') {
             $lq->where(fn ($w) => $w->whereNull('leads.assignee_id')->orWhere('leads.assignee_id', $ctx->user->id));
         }
         $ls = $lq->limit(5)->get(['leads.id', 'leads.full_name as name', 'leads.campaign_id as campaignId', 'campaigns.name as campaignName']);
         $ps = DB::table('deployments')->where('tenant_id', $ctx->tenantId)->where('status', '<>', 'deleted')
-            ->where(fn ($w) => $w->where('name', 'ilike', $like)->orWhere('subdomain', 'ilike', $like))->limit(5)->get(['id', 'name', 'subdomain']);
+            ->where(fn ($w) => $w->whereRaw('lower(name) like lower(?)', [$like])->orWhereRaw('lower(subdomain) like lower(?)', [$like]))->limit(5)->get(['id', 'name', 'subdomain']);
         $base = config('camplo.pages_base_domain');
 
         return [

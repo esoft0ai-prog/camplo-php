@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Domain\Rules;
 use App\Support\Fmt;
+use App\Support\Sql;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -103,7 +104,7 @@ final class AiTools
 
             return $q;
         };
-        $f = $scope(DB::table('leads'))->selectRaw("count(*) as n, count(*) filter (where leads.status = 'responded') as r, count(*) filter (where leads.has_external_lifecycle_events) as ext")->first();
+        $f = $scope(DB::table('leads'))->selectRaw(Sql::q("count(*) as n, count(*) filter (where leads.status = 'responded') as r, count(*) filter (where leads.has_external_lifecycle_events) as ext"))->first();
         $ev = $scope(DB::table('lead_lifecycle_events as e')->join('leads', 'leads.id', '=', 'e.lead_id'))->where('e.source', '<>', 'camplo')->groupBy('e.event')
             ->selectRaw('e.event, count(distinct e.lead_id) as n')->get();
 
@@ -124,7 +125,7 @@ final class AiTools
     private static function team(string $tenantId): array
     {
         return DB::table('leads')->join('users', 'users.id', '=', 'leads.responded_by')->where('leads.tenant_id', $tenantId)->where('leads.received_at', '>=', Fmt::ts(-7 * 86400))
-            ->groupBy('users.name')->selectRaw('users.name, count(*) as n, avg(extract(epoch from (leads.responded_at - leads.received_at))*1000) as avg, count(*) filter (where extract(isodow from leads.received_at) >= 6) as weekend')
+            ->groupBy('users.name')->selectRaw(Sql::q('users.name, count(*) as n, avg(extract(epoch from (leads.responded_at - leads.received_at))*1000) as avg, count(*) filter (where extract(isodow from leads.received_at) >= 6) as weekend'))
             ->get()->map(fn ($r) => ['member' => $r->name, 'responded' => (int) $r->n, 'avg_response' => Rules::formatDuration($r->avg === null ? null : (float) $r->avg), 'weekend_leads' => (int) $r->weekend])->all();
     }
 

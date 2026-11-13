@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Support\Crypto;
+use App\Support\Sql;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Throwable;
@@ -102,7 +103,7 @@ final class Telegram
             $code = strtolower($m[1]);
             $chat = $u['message']['chat']['id'];
             $q = DB::table('users')->whereNull('removed_at');
-            strlen($code) === 32 ? $q->where('id', self::uuidOf($code)) : $q->whereRaw('id::text like ?', [$code.'%']);
+            strlen($code) === 32 ? $q->where('id', self::uuidOf($code)) : $q->whereRaw(Sql::q('id::text like ?'), [$code.'%']);
             if ($scope !== 'global') {
                 $q->where('tenant_id', $scope);
             }
@@ -132,8 +133,8 @@ final class Telegram
                 $reply = 'Already acknowledged by '.($by ?? 'a teammate').' at '.gmdate('H:i', strtotime($l->responded_at)).' UTC.';
             } else {
                 $claim = ! $l->assignee_id;
-                $updated = DB::selectOne('update leads set status = \'responded\', responded_at = now(), responded_by = ?'.($claim ? ', assignee_id = ?, assignment_path = \'A\', claimed_at = now()' : '')
-                    .' where id = ? and status = \'not_responded\' returning *', $claim ? [$usr->id, $usr->id, $l->id] : [$usr->id, $l->id]);
+                $updated = Sql::updateReturning('leads', "status = 'responded', responded_at = now(), responded_by = ?".($claim ? ", assignee_id = ?, assignment_path = 'A', claimed_at = now()" : ''),
+                    $claim ? [$usr->id, $usr->id] : [$usr->id], "id = ? and status = 'not_responded'", [$l->id])[0] ?? null;
                 if ($updated) {
                     if ($claim) {
                         DB::table('lead_assignment_history')->insert(['tenant_id' => $l->tenant_id, 'lead_id' => $l->id, 'to_assignee_id' => $usr->id, 'path' => 'A', 'actioned_by' => $usr->id]);

@@ -4,7 +4,9 @@ namespace Tests\Feature;
 
 use App\Services\Mailer;
 use App\Support\Crypto;
+use App\Support\Sql;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class CampaignLeadTest extends TestCase
@@ -12,7 +14,7 @@ class CampaignLeadTest extends TestCase
     /** A page row with a webhook secret, so leads can be ingested through the signed endpoint. */
     private function page(string $tenantId, ?string $campaignId, string $secret = 'page-secret-123', bool $vip = false): string
     {
-        return DB::table('deployments')->insertGetId([
+        return Sql::insertId('deployments', [
             'tenant_id' => $tenantId, 'campaign_id' => $campaignId, 'name' => 'landing', 'subdomain' => 'landing-'.bin2hex(random_bytes(3)), 'storage_path' => 'x/',
             'status' => 'ready', 'webhook_secret_encrypted' => Crypto::encrypt($secret, 'webhook'), 'deployed_at' => now(), 'vip' => $vip,
         ]);
@@ -44,7 +46,7 @@ class CampaignLeadTest extends TestCase
 
         $this->as($tok)->postJson("/api/campaigns/{$c['id']}/pin")->assertOk()->assertJson(['pinned' => true]);
         $this->as($tok)->getJson('/api/campaigns')->assertOk()->assertJsonPath('data.0.id', $c['id'])->assertJsonPath('has_more', false);
-        $this->as($tok)->getJson('/api/campaigns/'.\Illuminate\Support\Str::uuid())->assertStatus(404)->assertJsonPath('message', 'Campaign not found.');
+        $this->as($tok)->getJson('/api/campaigns/'.Str::uuid())->assertStatus(404)->assertJsonPath('message', 'Campaign not found.');
         $this->as($tok)->deleteJson("/api/campaigns/{$c['id']}")->assertOk();
         $this->assertSame(2, DB::table('campaigns')->count());
     }
@@ -93,7 +95,7 @@ class CampaignLeadTest extends TestCase
     {
         $this->owner();
         $tid = $this->tenantId();
-        $hook = DB::table('inbound_webhooks')->insertGetId(['tenant_id' => $tid, 'source_label' => 'Zapier', 'url' => 'x', 'secret_encrypted' => Crypto::encrypt('hook-secret', 'webhook')]);
+        $hook = Sql::insertId('inbound_webhooks', ['tenant_id' => $tid, 'source_label' => 'Zapier', 'url' => 'x', 'secret_encrypted' => Crypto::encrypt('hook-secret', 'webhook')]);
         $this->postJson("/api/v1/hooks/{$hook}?token=nope", ['name' => 'X'])->assertStatus(401);
         $this->postJson("/api/v1/hooks/{$hook}?token=hook-secret", ['name' => 'Zap Lead', 'email' => 'z@x.test'])->assertStatus(201);
         $raw = json_encode(['data' => ['fields' => [['label' => 'Full name', 'value' => 'Tally Person'], ['label' => 'Email', 'value' => 't@x.test']]]]);

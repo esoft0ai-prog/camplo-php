@@ -2,22 +2,26 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
- * The Camplo schema, exactly as the Node version shipped it (database/sql/*.sql, Postgres only), so an existing
- * Camplo database keeps working. Each file runs once; files already applied by the Node app are skipped
+ * The Camplo schema, exactly as the Node version shipped it (database/sql/*.sql for PostgreSQL), so an existing
+ * Camplo database keeps working. On MySQL the generated equivalents in database/sql/mysql/ run instead
+ * (database/tools/pg2mysql.php). Each file runs once; on PostgreSQL, files the Node app already applied are skipped
  * (see the `drizzle.__drizzle_migrations` check below). New schema changes go in new Laravel migrations.
  */
 return new class extends Migration
 {
     public function up(): void
     {
-        foreach (glob(database_path('sql/*.sql')) as $file) {
-            if ($this->appliedByNode(basename($file, '.sql'))) {
+        $mysql = in_array(DB::connection()->getDriverName(), ['mysql', 'mariadb'], true);
+        foreach (glob(database_path($mysql ? 'sql/mysql/*.sql' : 'sql/*.sql')) as $file) {
+            if (! $mysql && $this->appliedByNode(basename($file, '.sql'))) {
                 continue;
             }
             foreach (preg_split('/-->\s*statement-breakpoint/', file_get_contents($file)) as $stmt) {
-                if (trim($stmt) !== '') {
+                $stmt = trim(preg_replace('/^--[^\n]*\n/m', '', $stmt));
+                if ($stmt !== '') {
                     DB::unprepared($stmt);
                 }
             }
@@ -42,6 +46,11 @@ return new class extends Migration
 
     public function down(): void
     {
+        if (in_array(DB::connection()->getDriverName(), ['mysql', 'mariadb'], true)) {
+            Schema::dropAllTables();
+
+            return;
+        }
         DB::unprepared('drop schema public cascade; create schema public;');
     }
 };

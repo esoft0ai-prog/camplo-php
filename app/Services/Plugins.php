@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Extensions\Catalog;
 use App\Support\Errors;
 use App\Support\Fmt;
+use App\Support\Sql;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Throwable;
@@ -188,7 +189,7 @@ final class Plugins
     {
         $facts = BriefingService::facts(AiTools::snapshot($t->id));
         $s = DB::table('leads')->where('tenant_id', $t->id)->where('received_at', '>=', Fmt::ts(-7 * 86400))
-            ->selectRaw("count(*) as n, count(*) filter (where status = 'responded') as r")->first();
+            ->selectRaw(Sql::q("count(*) as n, count(*) filter (where status = 'responded') as r"))->first();
         $lines = ["Last 7 days: {$s->n} leads, {$s->r} responded.", "Right now: {$facts['overdue']} overdue across {$facts['campaigns']} campaigns.",
             ...array_map(fn ($u) => "• {$u}", $facts['urgency']), ...array_map(fn ($a) => "• {$a}", $facts['anomalies'])];
         $q = DB::table('users')->where('tenant_id', $t->id)->whereNull('removed_at');

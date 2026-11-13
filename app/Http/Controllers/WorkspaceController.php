@@ -6,8 +6,10 @@ use App\Domain\Permissions;
 use App\Services\Platform;
 use App\Services\SettingsService;
 use App\Services\WorkspaceService as WS;
+use App\Support\Fail;
 use App\Support\Input;
 use App\Support\Paginate;
+use App\Support\Sql;
 use App\Support\Storage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -123,7 +125,7 @@ class WorkspaceController
     public function readNotification(string $nid)
     {
         if ($nid !== 'all' && ! preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $nid)) {
-            throw \App\Support\Fail::bad('Input validation failed');
+            throw Fail::bad('Input validation failed');
         }
 
         return WS::markRead(ctx(), $nid);
@@ -177,7 +179,7 @@ class WorkspaceController
     {
         DB::table('tenants')->limit(1)->get(['id']);
 
-        return ['ok' => true, 'database' => 'postgres', 'ai' => (bool) Platform::get()['ai']['openRouterApiKey'], 'memory' => config('camplo.hindsight_api_url') ? 'hindsight' : 'relational', 'queue' => 'inline'];
+        return ['ok' => true, 'database' => Sql::mysql() ? 'mysql' : 'postgres', 'ai' => (bool) Platform::get()['ai']['openRouterApiKey'], 'memory' => config('camplo.hindsight_api_url') ? 'hindsight' : 'relational', 'queue' => 'inline'];
     }
 
     /** Workspace logos and avatars (the only stored files served from the app origin). */

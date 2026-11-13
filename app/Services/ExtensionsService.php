@@ -9,6 +9,7 @@ use App\Support\Crypto;
 use App\Support\Ctx;
 use App\Support\Fail;
 use App\Support\Fmt;
+use App\Support\Sql;
 use Illuminate\Support\Facades\DB;
 use Throwable;
 
@@ -218,7 +219,7 @@ final class ExtensionsService
         }
         $token = 'cmcp_'.Crypto::randomToken();
         $name = mb_substr(trim($name), 0, 100) ?: 'MCP client';
-        $id = DB::table('mcp_tokens')->insertGetId(['tenant_id' => $ctx->tenantId, 'created_by' => $ctx->user->id, 'name' => $name, 'token_hash' => Crypto::sha256($token), 'prefix' => substr($token, 0, 12)]);
+        $id = Sql::insertId('mcp_tokens', ['tenant_id' => $ctx->tenantId, 'created_by' => $ctx->user->id, 'name' => $name, 'token_hash' => Crypto::sha256($token), 'prefix' => substr($token, 0, 12)]);
         Effects::logWorkspace($ctx->tenantId, $ctx->user->id, "Created MCP token \"{$name}\"");
 
         return ['id' => $id, 'name' => $name, 'prefix' => substr($token, 0, 12), 'token' => $token, 'endpoint' => self::endpoint()];
@@ -241,7 +242,7 @@ final class ExtensionsService
 
     public static function adminCatalog(): array
     {
-        $counts = DB::table('workspace_extensions')->where('enabled', true)->groupBy('key')->selectRaw('key, count(*)::int as n, coalesce(sum(usage_count),0)::int as calls')->get()->keyBy('key');
+        $counts = DB::table('workspace_extensions')->where('enabled', true)->groupBy('key')->select('key')->selectRaw('count(*) as n, coalesce(sum(usage_count), 0) as calls')->get()->keyBy('key');
 
         return array_map(fn ($i) => [...$i, 'workspaces' => (int) ($counts[$i['key']]->n ?? 0), 'calls' => (int) ($counts[$i['key']]->calls ?? 0)], Catalog::all());
     }

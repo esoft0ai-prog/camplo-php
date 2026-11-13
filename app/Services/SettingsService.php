@@ -6,9 +6,9 @@ use App\Support\Crypto;
 use App\Support\Ctx;
 use App\Support\Fail;
 use App\Support\Fmt;
+use App\Support\Sql;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Str;
 use Throwable;
 
 /** Integrations, webhooks, AI provider, Telegram and notification settings. */
@@ -209,7 +209,7 @@ final class SettingsService
             if ($hook) {
                 DB::table('inbound_webhooks')->where('id', $hook->id)->update(['status' => 'active', ...(array_key_exists('campaignId', $in) ? ['campaign_id' => $campaignId] : [])]);
             } else {
-                $hid = DB::table('inbound_webhooks')->insertGetId(['tenant_id' => $ctx->tenantId, 'source_label' => $cat['name'], 'url' => 'pending', 'secret_encrypted' => Crypto::encrypt(Crypto::randomToken(24), 'webhook'), 'campaign_id' => $campaignId]);
+                $hid = Sql::insertId('inbound_webhooks', ['tenant_id' => $ctx->tenantId, 'source_label' => $cat['name'], 'url' => 'pending', 'secret_encrypted' => Crypto::encrypt(Crypto::randomToken(24), 'webhook'), 'campaign_id' => $campaignId]);
                 DB::table('inbound_webhooks')->where('id', $hid)->update(['url' => config('camplo.app_url')."/api/v1/hooks/{$hid}"]);
                 $cfg['inboundWebhookId'] = $hid;
             }
@@ -227,7 +227,7 @@ final class SettingsService
             DB::table('integrations')->where('id', $existing->id)->update($values);
             $id = $existing->id;
         } else {
-            $id = DB::table('integrations')->insertGetId($values);
+            $id = Sql::insertId('integrations', $values);
         }
         if (in_array('lifecycle', $cat['webhooks'], true) && ! DB::table('integrations')->where('id', $id)->value('webhook_url')) {
             DB::table('integrations')->where('id', $id)->update(['webhook_url' => config('camplo.app_url')."/api/v1/lifecycle/{$id}/".Crypto::randomToken(18)]);
@@ -333,7 +333,7 @@ final class SettingsService
             CampaignService::load($ctx, $campaignId);
         }
         $secret = Crypto::randomToken(24);
-        $id = DB::table('inbound_webhooks')->insertGetId(['tenant_id' => $ctx->tenantId, 'source_label' => trim($label), 'url' => 'pending', 'secret_encrypted' => Crypto::encrypt($secret, 'webhook'), 'campaign_id' => $campaignId]);
+        $id = Sql::insertId('inbound_webhooks', ['tenant_id' => $ctx->tenantId, 'source_label' => trim($label), 'url' => 'pending', 'secret_encrypted' => Crypto::encrypt($secret, 'webhook'), 'campaign_id' => $campaignId]);
         $url = config('camplo.app_url')."/api/v1/hooks/{$id}";
         DB::table('inbound_webhooks')->where('id', $id)->update(['url' => $url]);
 
@@ -369,7 +369,7 @@ final class SettingsService
         if (preg_match('/^(localhost|127\.|10\.|192\.168\.|169\.254\.)/', $u['host'])) {
             throw Fail::bad('Private network destinations are not allowed.');
         }
-        $id = DB::table('outbound_webhooks')->insertGetId(['tenant_id' => $ctx->tenantId, 'destination_url' => $in['destinationUrl'], 'event_trigger' => $in['eventTrigger'],
+        $id = Sql::insertId('outbound_webhooks', ['tenant_id' => $ctx->tenantId, 'destination_url' => $in['destinationUrl'], 'event_trigger' => $in['eventTrigger'],
             'secret_encrypted' => ! empty($in['secret']) ? Crypto::encrypt($in['secret'], 'webhook') : null]);
 
         return ['id' => $id, 'destinationUrl' => $in['destinationUrl'], 'eventTrigger' => $in['eventTrigger'], 'status' => 'active'];

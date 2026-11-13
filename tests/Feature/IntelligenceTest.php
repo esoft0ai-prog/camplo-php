@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Services\Ai;
 use App\Services\Engine;
 use App\Services\Platform;
+use App\Support\Sql;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
@@ -34,7 +35,7 @@ class IntelligenceTest extends TestCase
     private function campaign(string $name = 'Lagos Launch', int $overdue = 2, int $fresh = 0, string $start = '2026-01-01', ?float $daily = null, ?float $cplThr = null): string
     {
         $tid = $this->tenantId();
-        $id = DB::table('campaigns')->insertGetId(['tenant_id' => $tid, 'name' => $name, 'owner_id' => DB::table('users')->where('tenant_id', $tid)->value('id'), 'start_date' => $start,
+        $id = Sql::insertId('campaigns', ['tenant_id' => $tid, 'name' => $name, 'owner_id' => DB::table('users')->where('tenant_id', $tid)->value('id'), 'start_date' => $start,
             'daily_spend' => $daily, 'cpl_threshold' => $cplThr]);
         for ($i = 0; $i < $overdue; $i++) {
             DB::table('leads')->insert(['tenant_id' => $tid, 'campaign_id' => $id, 'full_name' => "Waiting {$i}", 'source_system' => 'test', 'received_at' => now()->subHours(5 + $i)]);
@@ -165,7 +166,7 @@ class IntelligenceTest extends TestCase
         $this->assertSame(0, Engine::refresh($this->tenantId(), true)['recommendations']);
 
         // 7 days after a change, its outcome is measured and remembered
-        $ch = DB::table('campaign_changes')->insertGetId(['tenant_id' => $this->tenantId(), 'campaign_id' => $cid, 'change_type' => 'budget', 'change_description' => 'Raised budget',
+        $ch = Sql::insertId('campaign_changes', ['tenant_id' => $this->tenantId(), 'campaign_id' => $cid, 'change_type' => 'budget', 'change_description' => 'Raised budget',
             'performance_before' => json_encode(['leads_7d' => 1]), 'changed_at' => now()->subDays(8), 'changed_by' => DB::table('users')->value('id')]);
         Engine::measureMemory();
         $this->assertNotNull(DB::table('campaign_changes')->where('id', $ch)->value('performance_after'));

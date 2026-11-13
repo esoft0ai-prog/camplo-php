@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Domain\Rules;
 use App\Support\Fmt;
+use App\Support\Sql;
 use Illuminate\Support\Facades\DB;
 
 final class Metrics
@@ -16,7 +17,7 @@ final class Metrics
         if ($extra) {
             $extra($q);
         }
-        $r = $q->selectRaw('avg(extract(epoch from (responded_at - received_at)) * 1000) as avg, count(*) as n')->first();
+        $r = $q->selectRaw(Sql::q('avg(extract(epoch from (responded_at - received_at)) * 1000) as avg, count(*) as n'))->first();
 
         return ['avgMs' => $r->avg === null ? null : (int) round((float) $r->avg), 'count' => (int) $r->n];
     }
@@ -34,7 +35,7 @@ final class Metrics
     /** Share of the plan's Deep/Strategic budget used this month (non-BYOK). */
     public static function advancedUsage(string $tenantId, string $plan): float
     {
-        $start = gmdate('Y-m-01 00:00:00+00');
+        $start = Sql::day0(gmdate('Y-m-01'));
         $total = (float) DB::table('ai_workload_logs')->where('tenant_id', $tenantId)->where('byok', false)
             ->whereIn('workload_level', ['deep', 'strategic'])->where('created_at', '>=', $start)->sum('cost_usd');
         $budget = Platform::get()['pricing']['plans'][$plan]['deepBudgetUsd'] ?: 1;
@@ -44,6 +45,7 @@ final class Metrics
 
     /**
      * Per-campaign aggregates computed from the operational database (never stored).
+     *
      * @return array<string,array> campaignId → stats
      */
     public static function campaignStats(string $tenantId, ?array $ids = null): array
@@ -59,10 +61,10 @@ final class Metrics
         $d7 = Fmt::ts(-7 * 86400);
         $d35 = Fmt::ts(-35 * 86400);
         $rows = DB::table('leads')->where('tenant_id', $tenantId)->whereIn('campaign_id', $ids)->groupBy('campaign_id')
-            ->selectRaw("campaign_id as cid, count(*) as total, count(*) filter (where status = 'responded') as responded,
+            ->selectRaw(Sql::q("campaign_id as cid, count(*) as total, count(*) filter (where status = 'responded') as responded,
                 avg(extract(epoch from (responded_at - received_at)) * 1000) filter (where responded_at is not null) as avg_ms,
                 count(*) filter (where received_at >= ?) as l7, count(*) filter (where received_at >= ? and status = 'responded') as r7,
-                count(*) filter (where received_at >= ? and received_at < ?) as prior4w", [$d7, $d7, $d35, $d7])->get();
+                count(*) filter (where received_at >= ? and received_at < ?) as prior4w"), [$d7, $d7, $d35, $d7])->get();
         foreach ($rows as $r) {
             $s = &$out[$r->cid];
             $s['leadCount'] = (int) $r->total;

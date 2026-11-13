@@ -6,6 +6,7 @@ use App\Domain\Rules;
 use App\Support\Ctx;
 use App\Support\Fail;
 use App\Support\Fmt;
+use App\Support\Sql;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -112,7 +113,7 @@ final class IntelService
 
     public static function dismissRecommendation(Ctx $ctx, string $id): array
     {
-        $r = Str::isUuid($id) ? DB::selectOne("update campaign_recommendations set status = 'dismissed', actioned_at = now() where tenant_id = ? and id = ? and status = 'surfaced' returning *", [$ctx->tenantId, $id]) : null;
+        $r = Str::isUuid($id) ? (Sql::updateReturning('campaign_recommendations', "status = 'dismissed', actioned_at = now()", [], "tenant_id = ? and id = ? and status = 'surfaced'", [$ctx->tenantId, $id])[0] ?? null) : null;
         if (! $r) {
             throw Fail::notFound('Recommendation not found.');
         }
@@ -191,7 +192,7 @@ final class IntelService
             [$tid, $plan, $name] = [$ctx->tenantId, $ctx->plan, $ctx->user->name];
             Jobs::defer(fn () => Memory::learnFromChat($tid, $plan, $name, $text, $res['answer'], $res['campaignId']));
         }
-        $id = DB::table('chat_messages')->insertGetId(['tenant_id' => $ctx->tenantId, 'role' => 'assistant', 'content' => $res['answer'], 'workload_level' => $res['workload'], 'sources' => json_encode($res['sources'])]);
+        $id = Sql::insertId('chat_messages', ['tenant_id' => $ctx->tenantId, 'role' => 'assistant', 'content' => $res['answer'], 'workload_level' => $res['workload'], 'sources' => json_encode($res['sources'])]);
         $at = DB::table('chat_messages')->where('id', $id)->value('created_at');
 
         return ['id' => $id, 'role' => 'assistant', 'content' => $res['answer'], 'workload' => $res['workload'], 'investigated' => $res['investigated'],

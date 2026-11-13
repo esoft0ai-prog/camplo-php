@@ -7,9 +7,11 @@ use App\Support\Crypto;
 use App\Support\Ctx;
 use App\Support\Fail;
 use App\Support\Fmt;
-use Illuminate\Support\Facades\DB;
+use App\Support\Sql;
 use App\Support\Storage;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use ZipArchive;
 
@@ -72,7 +74,7 @@ final class PageService
         ];
     }
 
-    private static function hooksFor(array $ids): \Illuminate\Support\Collection
+    private static function hooksFor(array $ids): Collection
     {
         return $ids ? DB::table('webhook_sources')->whereIn('deployment_id', $ids)->get()->keyBy('deployment_id') : collect();
     }
@@ -115,7 +117,7 @@ final class PageService
         $d = self::load($ctx, $id);
         $cname = $d->campaign_id ? DB::table('campaigns')->where('id', $d->campaign_id)->value('name') : null;
         $lc = DB::table('leads')->where('tenant_id', $ctx->tenantId)->where('deployment_id', $id)
-            ->selectRaw("count(*) as n, count(*) filter (where status = 'not_responded') as un, avg(extract(epoch from (responded_at - received_at))) filter (where responded_at is not null) as avg")->first();
+            ->selectRaw(Sql::q("count(*) as n, count(*) filter (where status = 'not_responded') as un, avg(extract(epoch from (responded_at - received_at))) filter (where responded_at is not null) as avg"))->first();
 
         return [
             ...self::serialize($d, $cname, self::hooksFor([$id])[$id] ?? null, self::analytics($ctx->tenantId, [$id])[$id], Metrics::workspaceConversion($ctx->tenantId),
@@ -137,8 +139,8 @@ final class PageService
                 $days[$r->day]['visits'] = (int) $r->visits;
             }
         }
-        foreach (DB::table('leads')->where('deployment_id', $id)->where('received_at', '>=', "{$first} 00:00:00+00")->groupByRaw('1')
-            ->selectRaw("to_char(received_at at time zone 'UTC', 'YYYY-MM-DD') as day, count(*) as n")->get() as $r) {
+        foreach (DB::table('leads')->where('deployment_id', $id)->where('received_at', '>=', Sql::day0($first))->groupByRaw('1')
+            ->selectRaw(Sql::q("to_char(received_at at time zone 'UTC', 'YYYY-MM-DD') as day, count(*) as n"))->get() as $r) {
             if (isset($days[$r->day])) {
                 $days[$r->day]['leads'] = (int) $r->n;
             }
@@ -307,7 +309,7 @@ final class PageService
         }
         self::ensureQuota($ctx, $x['size']);
         $name = trim((string) ($in['name'] ?? '')) ?: preg_replace('/\.zip$/i', '', $file->getClientOriginalName());
-        $id = DB::table('deployments')->insertGetId([
+        $id = Sql::insertId('deployments', [
             'tenant_id' => $ctx->tenantId, 'campaign_id' => $campaignId, 'name' => $name, 'subdomain' => self::slugify(($in['slug'] ?? '') ?: $name).'-'.self::shortId(),
             'storage_path' => 'pending', 'entry_file' => $x['entryFile'], 'serving_root' => $x['servingRoot'], 'status' => 'processing',
             'webhook_secret_encrypted' => Crypto::encrypt(Crypto::randomToken(24), 'webhook'),
@@ -477,7 +479,7 @@ final class PageService
         if ($taken) {
             throw Fail::conflict($taken->tenant_id !== $ctx->tenantId ? 'This domain is already connected to another account.' : 'This domain is already connected.');
         }
-        $id = DB::table('domains')->insertGetId(['tenant_id' => $ctx->tenantId, 'deployment_id' => $deploymentId, 'domain_name' => $name, 'verification_token' => Crypto::randomToken(12)]);
+        $id = Sql::insertId('domains', ['tenant_id' => $ctx->tenantId, 'deployment_id' => $deploymentId, 'domain_name' => $name, 'verification_token' => Crypto::randomToken(12)]);
 
         return ['id' => $id, 'domainName' => $name, 'status' => 'pending', 'record' => ['name' => $name, 'type' => 'CNAME', 'value' => "{$d->subdomain}.".config('camplo.pages_base_domain')]];
     }
@@ -577,7 +579,8 @@ final class PageService
             $f = Storage::get($d->storage_path.$c);
             if ($f) {
                 if (preg_match('/\.html?$/i', $c)) {
-                    DB::statement('insert into page_visits (tenant_id, deployment_id, day, visits) values (?, ?, ?, 1) on conflict (deployment_id, day) do update set visits = page_visits.visits + 1', [$d->tenant_id, $d->id, gmdate('Y-m-d')]);
+                    DB::statement('insert into page_visits (tenant_id, deployment_id, day, visits) values (?, ?, ?, 1) '.(Sql::mysql()
+                        ? 'on duplicate key update visits = visits + 1' : 'on conflict (deployment_id, day) do update set visits = page_visits.visits + 1'), [$d->tenant_id, $d->id, gmdate('Y-m-d')]);
                 }
 
                 return $f;

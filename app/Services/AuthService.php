@@ -9,6 +9,7 @@ use App\Support\Ctx;
 use App\Support\Fail;
 use App\Support\Fmt;
 use App\Support\Jwt;
+use App\Support\Sql;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -126,7 +127,7 @@ final class AuthService
     public static function verifyMagicLink(Ctx $ctx, string $token): array
     {
         $msg = 'This sign-in link has expired or was already used. Request a new one.';
-        $t = DB::selectOne("update one_time_tokens set used_at = now() where token_hash = ? and purpose = 'magic_login' and used_at is null and expires_at > now() returning user_id", [Crypto::sha256($token)]);
+        $t = Sql::updateReturning('one_time_tokens', 'used_at = now()', [], "token_hash = ? and purpose = 'magic_login' and used_at is null and expires_at > now()", [Crypto::sha256($token)], 'user_id')[0] ?? null;
         if (! $t || ! $t->user_id) {
             throw Fail::unauthorized($msg);
         }
@@ -181,9 +182,11 @@ final class AuthService
         }
         $auto = (bool) Platform::get()['signup']['autoActivate'];
         $tenant = DB::transaction(function () use ($in, $email, $auto) {
-            $t = DB::selectOne('insert into tenants (business_name, owner_name, owner_email, notification_email, plan, status, activated_at, storage_quota_bytes) values (?, ?, ?, ?, ?, ?, ?, ?) returning *', [
-                $in['workspaceName'], $in['name'], $email, $email, $in['plan'], $auto ? 'active' : 'pending_activation', $auto ? now() : null, config('camplo.default_storage_quota_bytes'),
+            $id = Sql::insertId('tenants', [
+                'business_name' => $in['workspaceName'], 'owner_name' => $in['name'], 'owner_email' => $email, 'notification_email' => $email, 'plan' => $in['plan'],
+                'status' => $auto ? 'active' : 'pending_activation', 'activated_at' => $auto ? now() : null, 'storage_quota_bytes' => config('camplo.default_storage_quota_bytes'),
             ]);
+            $t = DB::table('tenants')->where('id', $id)->first();
             DB::table('users')->insert(['tenant_id' => $t->id, 'email' => $email, 'name' => $in['name'], 'role' => 'owner', 'password_hash' => self::hashPassword($in['password']), 'joined_at' => now()]);
             DB::table('ai_provider_configs')->insert(['tenant_id' => $t->id]);
 

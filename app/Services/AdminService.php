@@ -8,6 +8,7 @@ use App\Support\Fail;
 use App\Support\Fmt;
 use App\Support\IngestStats;
 use App\Support\Jwt;
+use App\Support\Sql;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -253,7 +254,7 @@ final class AdminService
 
     public static function systemHealth(): array
     {
-        $today = DB::table('leads')->where('received_at', '>=', gmdate('Y-m-d').'T00:00:00Z')->count();
+        $today = DB::table('leads')->where('received_at', '>=', Sql::day0(gmdate('Y-m-d')))->count();
         $sources = DB::table('webhook_sources as w')->join('tenants as t', 't.id', '=', 'w.tenant_id')->get(['w.label', 'w.last_received_at', 'w.stale_threshold_minutes', 't.business_name']);
         $stale = $sources->filter(fn ($s) => in_array(Rules::webhookState($s->last_received_at, (int) $s->stale_threshold_minutes), ['stale', 'offline'], true));
 

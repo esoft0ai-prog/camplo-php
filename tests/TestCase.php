@@ -5,8 +5,10 @@ namespace Tests;
 use App\Services\Mailer;
 use App\Services\Platform;
 use App\Support\Crypto;
+use Illuminate\Contracts\Http\Kernel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Testing\TestResponse;
 
@@ -14,8 +16,11 @@ abstract class TestCase extends BaseTestCase
 {
     use RefreshDatabase;
 
-    /** The schema defines Postgres enum types; drop them with the tables between runs. */
-    protected bool $dropTypes = true;
+    /** On PostgreSQL the schema defines enum types; drop them with the tables between runs. */
+    protected function shouldDropTypes()
+    {
+        return config('database.default') === 'pgsql';
+    }
 
     protected function setUp(): void
     {
@@ -69,7 +74,7 @@ abstract class TestCase extends BaseTestCase
     /** A GET that keeps the URL exactly as given (the test client trims trailing slashes). */
     protected function rawGet(string $url): TestResponse
     {
-        $response = $this->app->make(\Illuminate\Contracts\Http\Kernel::class)->handle(\Illuminate\Http\Request::create($url, 'GET'));
+        $response = $this->app->make(Kernel::class)->handle(Request::create($url, 'GET'));
 
         return TestResponse::fromBaseResponse($response);
     }

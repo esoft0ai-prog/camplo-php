@@ -6,6 +6,7 @@ use App\Services\Ai;
 use App\Services\LeadService;
 use App\Services\Platform;
 use App\Services\Plugins;
+use App\Support\Sql;
 use Illuminate\Http\Client\Request as HttpRequest;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -67,7 +68,7 @@ class ExtensionsTest extends TestCase
     {
         [$tok] = $this->owner();
         $tid = $this->tenantId();
-        $cid = DB::table('campaigns')->insertGetId(['tenant_id' => $tid, 'name' => 'Abuja Promo', 'owner_id' => DB::table('users')->value('id'), 'start_date' => '2026-01-01']);
+        $cid = Sql::insertId('campaigns', ['tenant_id' => $tid, 'name' => 'Abuja Promo', 'owner_id' => DB::table('users')->value('id'), 'start_date' => '2026-01-01']);
         DB::table('leads')->insert(['tenant_id' => $tid, 'campaign_id' => $cid, 'full_name' => 'Ada Late', 'email' => 'ada@example.com', 'source_system' => 'test', 'received_at' => now()->subHours(9)]);
 
         $made = $this->as($tok)->postJson('/api/extensions/mcp-tokens', ['name' => 'Claude'])->assertOk();

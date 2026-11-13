@@ -6,6 +6,7 @@ use App\Domain\Rules;
 use App\Support\Ctx;
 use App\Support\Fail;
 use App\Support\Fmt;
+use App\Support\Sql;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -53,7 +54,7 @@ final class NoteService
         if ($text === '') {
             throw Fail::bad('Note cannot be empty.');
         }
-        $id = DB::table('notes')->insertGetId([
+        $id = Sql::insertId('notes', [
             'tenant_id' => $ctx->tenantId, 'note_type' => $type, 'entity_id' => $entityId, 'author_id' => $ctx->user->id, 'content' => $text,
             'title' => $extra['title'] ?? null, 'meeting_date' => ! empty($extra['meetingDate']) ? $extra['meetingDate'] : null, 'via' => $type === 'meeting' ? 'Manual' : null,
         ]);
@@ -241,7 +242,7 @@ final class NoteService
         if ($deadline && $deadline->getTimestamp() < time()) {
             throw Fail::bad('Deadline must be in the future.');
         }
-        $id = DB::table('team_notes')->insertGetId([
+        $id = Sql::insertId('team_notes', [
             'tenant_id' => $ctx->tenantId, 'author_id' => $ctx->user->id, 'content' => trim($in['content']),
             'attachment_type' => $att ? $type : null, 'attachment_id' => $att, 'time_bound_deadline' => $deadline, 'time_bound_status' => $deadline ? 'pending' : null,
         ]);

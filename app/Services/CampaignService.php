@@ -6,8 +6,10 @@ use App\Domain\Rules;
 use App\Support\Ctx;
 use App\Support\Fail;
 use App\Support\Fmt;
+use App\Support\Sql;
 use App\Support\Storage;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Throwable;
 
@@ -86,7 +88,7 @@ final class CampaignService
             throw Fail::planLimit("Your plan includes {$lim} active campaigns. Upgrade to add more.", $ctx->plan === 'starter' ? 'growth' : 'watchtower');
         }
         $budget = $in['budget'] ?? null;
-        $id = DB::table('campaigns')->insertGetId([
+        $id = Sql::insertId('campaigns', [
             'tenant_id' => $ctx->tenantId, 'name' => trim($in['name']), 'description' => $in['description'] ?? null, 'owner_id' => $ctx->user->id,
             'start_date' => $in['startDate'] ?? gmdate('Y-m-d'), 'currency' => 'USD', 'budget' => $budget,
             'cpl_threshold' => $budget === null ? null : ($in['cplThreshold'] ?? null), 'daily_spend' => $in['dailySpend'] ?? null,
@@ -166,7 +168,7 @@ final class CampaignService
             $before = self::perfSnapshot($ctx->tenantId, $id);
             $type = $change['type'] ?? 'budget';
             $desc = $change['description'] ?? implode('; ', array_values(array_filter($logs, fn ($l) => preg_match('/spend|Budget/', $l))));
-            $chId = DB::table('campaign_changes')->insertGetId(['tenant_id' => $ctx->tenantId, 'campaign_id' => $id, 'change_type' => $type, 'change_description' => $desc, 'changed_by' => $ctx->user->id, 'performance_before' => json_encode($before)]);
+            $chId = Sql::insertId('campaign_changes', ['tenant_id' => $ctx->tenantId, 'campaign_id' => $id, 'change_type' => $type, 'change_description' => $desc, 'changed_by' => $ctx->user->id, 'performance_before' => json_encode($before)]);
             Effects::remember($ctx->tenantId, ['type' => 'experiment', 'campaignId' => $id, 'entityId' => $chId, 'content' => "{$type} change on \"{$c->name}\": {$desc}. Before: ".json_encode($before)]);
             if ($change) {
                 $logs[] = "Logged {$type} change: {$change['description']}";
@@ -338,7 +340,7 @@ final class CampaignService
         try {
             self::storeRetroPdf($t, $c, $r);
         } catch (Throwable $e) {
-            \Illuminate\Support\Facades\Log::error('[retro] pdf '.$e->getMessage());
+            Log::error('[retro] pdf '.$e->getMessage());
         }
         Effects::emit($tenantId, 'workspace:insights', ['campaignId' => $campaignId]);
     }

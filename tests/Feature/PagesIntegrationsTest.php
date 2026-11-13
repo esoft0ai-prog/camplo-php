@@ -2,11 +2,17 @@
 
 namespace Tests\Feature;
 
+use App\Services\CrossToolService;
 use App\Services\Mailer;
 use App\Services\PageService;
+use App\Services\Platform;
 use App\Services\SettingsService;
 use App\Services\Telegram;
 use App\Support\Crypto;
+use App\Support\Errors;
+use App\Support\Fail;
+use App\Support\Sql;
+use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -177,7 +183,7 @@ class PagesIntegrationsTest extends TestCase
         $twenty = $this->as($tok)->postJson('/api/integrations/twenty_crm/connect', ['fields' => ['baseUrl' => 'https://crm.example.com', 'apiKey' => 'twenty-key']])->assertOk()->json();
         $life = parse_url($twenty['webhooks']['lifecycle'], PHP_URL_PATH);
         DB::table('integrations')->update(['created_at' => now()->subDays(3)]);
-        $lead = DB::table('leads')->insertGetId(['tenant_id' => $tid, 'full_name' => 'Slow CRM', 'source_system' => 'webhook', 'email' => 'slow@x.test', 'received_at' => now()->subDays(2), 'status' => 'responded', 'responded_at' => now()->subHours(40)]);
+        $lead = Sql::insertId('leads', ['tenant_id' => $tid, 'full_name' => 'Slow CRM', 'source_system' => 'webhook', 'email' => 'slow@x.test', 'received_at' => now()->subDays(2), 'status' => 'responded', 'responded_at' => now()->subHours(40)]);
         $this->postJson($life, ['email' => 'slow@x.test', 'contact_id' => 'c-1', 'event' => 'Person created'])->assertStatus(201);
         $this->postJson($life, ['email' => 'unknown@x.test', 'event' => 'x'])->assertStatus(202);
         $this->postJson($life, ['email' => 'slow@x.test'])->assertStatus(422);
@@ -191,7 +197,7 @@ class PagesIntegrationsTest extends TestCase
         $this->assertSame(1, DB::table('insights')->where('dedupe_key', 'like', 'xtool:%')->count());
         // Evidence arrives → the breach resolves on the next check.
         $this->postJson($life, ['contact_id' => 'c-1', 'event' => 'Contacted by phone'])->assertStatus(201);
-        \App\Services\CrossToolService::check();
+        CrossToolService::check();
         $this->as($tok)->getJson('/api/sla/cross-tool')->assertJsonCount(0, 'data');
     }
 
@@ -247,7 +253,7 @@ class PagesIntegrationsTest extends TestCase
         $this->assertSame('777', DB::table('users')->value('telegram_chat_id'));
 
         // A new lead goes to the linked member with an Acknowledge button…
-        $lead = DB::table('leads')->insertGetId(['tenant_id' => $tid, 'full_name' => 'TG Lead', 'source_system' => 'webhook', 'received_at' => now()]);
+        $lead = Sql::insertId('leads', ['tenant_id' => $tid, 'full_name' => 'TG Lead', 'source_system' => 'webhook', 'received_at' => now()]);
         Telegram::notifyNewLead($tid, $lead);
         $msg = collect($calls)->last(fn ($c) => $c[0] === 'sendMessage');
         $data = $msg[1]['reply_markup']['inline_keyboard'][0][0]['callback_data'];
@@ -283,7 +289,7 @@ class PagesIntegrationsTest extends TestCase
         $tid = $this->tenantId();
         $secret = base64_encode('polar-webhook-secret-bytes');
         config(['camplo.polar_webhook_secret' => "whsec_{$secret}", 'camplo.polar_product_ids.watchtower' => 'prod_watch']);
-        \App\Services\Platform::invalidate();
+        Platform::invalidate();
         $send = function (array $evt, ?string $sig = null) use ($secret) {
             $raw = json_encode($evt);
             $id = 'msg_1';
@@ -310,10 +316,10 @@ class PagesIntegrationsTest extends TestCase
         $this->assertSame(['client', 2, '/#/leads'], [$e->source, (int) $e->count, $e->route]);
 
         // Unexpected exceptions are reported into error_events; expected API errors are not.
-        app(\Illuminate\Contracts\Debug\ExceptionHandler::class)->report(new \RuntimeException('Kaboom 42'));
-        app(\Illuminate\Contracts\Debug\ExceptionHandler::class)->report(\App\Support\Fail::notFound());
+        app(ExceptionHandler::class)->report(new \RuntimeException('Kaboom 42'));
+        app(ExceptionHandler::class)->report(Fail::notFound());
         $this->assertSame(1, DB::table('error_events')->where('source', 'server')->count());
         $this->assertSame('Kaboom 42', DB::table('error_events')->where('source', 'server')->value('message'));
-        $this->assertSame(['url' => 'https://o1.ingest.sentry.io/api/456/envelope/', 'auth' => 'Sentry sentry_version=7, sentry_key=abc, sentry_client=camplo/1.0'], \App\Support\Errors::sentryTarget('https://abc@o1.ingest.sentry.io/456'));
+        $this->assertSame(['url' => 'https://o1.ingest.sentry.io/api/456/envelope/', 'auth' => 'Sentry sentry_version=7, sentry_key=abc, sentry_client=camplo/1.0'], Errors::sentryTarget('https://abc@o1.ingest.sentry.io/456'));
     }
 }

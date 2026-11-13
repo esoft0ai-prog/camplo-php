@@ -6,6 +6,7 @@ use App\Domain\Rules;
 use App\Support\Ctx;
 use App\Support\Fail;
 use App\Support\Fmt;
+use App\Support\Sql;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 
@@ -27,8 +28,8 @@ final class SlaService
     public static function live(Ctx $ctx): array
     {
         $tid = $ctx->tenantId;
-        $startToday = gmdate('Y-m-d 00:00:00+00');
-        $startYesterday = gmdate('Y-m-d 00:00:00+00', time() - 86400);
+        $startToday = Sql::day0(gmdate('Y-m-d'));
+        $startYesterday = Sql::day0(gmdate('Y-m-d', time() - 86400));
         $d7 = Metrics::avgResponseMs($tid, Fmt::ts(-7 * 86400));
         $today = Metrics::avgResponseMs($tid, $startToday);
         $d30 = Metrics::avgResponseMs($tid, Fmt::ts(-30 * 86400));
@@ -37,8 +38,8 @@ final class SlaService
         $mine30 = Metrics::avgResponseMs($tid, Fmt::ts(-30 * 86400), null, self::mine($ctx->user->id));
         $thr = (int) $ctx->tenant->sla_threshold_minutes;
         $y = DB::table('leads')->where('tenant_id', $tid)->where('received_at', '>=', $startYesterday)->where('received_at', '<', $startToday)
-            ->selectRaw("count(*) as received, count(*) filter (where status = 'responded') as responded,
-                count(*) filter (where coalesce(responded_at, now()) - received_at > ?::int * interval '1 minute') as breaches", [$thr])->first();
+            ->selectRaw(Sql::q("count(*) as received, count(*) filter (where status = 'responded') as responded,
+                count(*) filter (where extract(epoch from (coalesce(responded_at, now()) - received_at)) > ?::int * 60) as breaches"), [$thr])->first();
         [$od, $odB] = LeadService::overdueSql($ctx->tenant);
         $worst = DB::table('leads')->where('tenant_id', $tid)->whereRaw($od, $odB)->orderBy('received_at')->first(['id', 'full_name', 'received_at', 'campaign_id']);
         $flags = DB::table('insights')->where('tenant_id', $tid)->where('type', 'priority_flag')->whereNull('dismissed_at')->count();
@@ -87,16 +88,16 @@ final class SlaService
             if (! preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
                 throw Fail::bad('Input validation failed');
             }
-            $start = "{$date} 00:00:00+00";
-            $end = gmdate('Y-m-d', strtotime("{$date} +1 day")).' 00:00:00+00';
+            $start = Sql::day0($date);
+            $end = Sql::day0(gmdate('Y-m-d', strtotime("{$date} +1 day")));
             $d = $scope(DB::table('leads')->where('tenant_id', $ctx->tenantId)->where('received_at', '>=', $start)->where('received_at', '<', $end))
-                ->selectRaw("count(*) as received, count(*) filter (where status = 'responded') as responded,
-                    count(*) filter (where coalesce(responded_at, now()) - received_at > ?::int * interval '1 minute') as overdue,
+                ->selectRaw(Sql::q("count(*) as received, count(*) filter (where status = 'responded') as responded,
+                    count(*) filter (where extract(epoch from (coalesce(responded_at, now()) - received_at)) > ?::int * 60) as overdue,
                     avg(extract(epoch from (responded_at - received_at))*1000) filter (where responded_at is not null) as avg,
-                    min(extract(epoch from (responded_at - received_at))*1000) as min, max(extract(epoch from (responded_at - received_at))*1000) as max", [$thr])->first();
+                    min(extract(epoch from (responded_at - received_at))*1000) as min, max(extract(epoch from (responded_at - received_at))*1000) as max"), [$thr])->first();
             $team = $scope(DB::table('leads')->join('users', 'users.id', '=', 'leads.responded_by')->where('leads.tenant_id', $ctx->tenantId)
                 ->where('leads.received_at', '>=', $start)->where('leads.received_at', '<', $end))
-                ->groupBy('users.id', 'users.name')->selectRaw('users.id, users.name, avg(extract(epoch from (leads.responded_at - leads.received_at))*1000) as avg')
+                ->groupBy('users.id', 'users.name')->selectRaw(Sql::q('users.id, users.name, avg(extract(epoch from (leads.responded_at - leads.received_at))*1000) as avg'))
                 ->orderByRaw('3 asc')->limit(3)->get();
             $avg = $d->avg === null ? null : (int) round((float) $d->avg);
 
@@ -108,9 +109,9 @@ final class SlaService
             ];
         }
         $since = gmdate('Y-m-d', time() - 6 * 86400);
-        $rows = $scope(DB::table('leads')->where('tenant_id', $ctx->tenantId)->where('received_at', '>=', "{$since} 00:00:00+00"))
-            ->groupByRaw('1')->selectRaw("to_char(received_at at time zone 'UTC', 'YYYY-MM-DD') as day,
-                avg(extract(epoch from (responded_at - received_at))*1000) filter (where responded_at is not null) as avg, count(*) as n")->get()->keyBy('day');
+        $rows = $scope(DB::table('leads')->where('tenant_id', $ctx->tenantId)->where('received_at', '>=', Sql::day0($since)))
+            ->groupByRaw('1')->selectRaw(Sql::q("to_char(received_at at time zone 'UTC', 'YYYY-MM-DD') as day,
+                avg(extract(epoch from (responded_at - received_at))*1000) filter (where responded_at is not null) as avg, count(*) as n"))->get()->keyBy('day');
         $days = [];
         for ($i = 0; $i < 7; $i++) {
             $date = gmdate('Y-m-d', strtotime("{$since} +{$i} day"));
@@ -135,8 +136,8 @@ final class SlaService
             if ($campaignId) {
                 $q->where('campaign_id', $campaignId);
             }
-            $a = $q->selectRaw("count(*) as assigned, count(*) filter (where status = 'responded') as responded,
-                count(*) filter (where coalesce(responded_at, now()) - received_at > ?::int * interval '1 minute') as breaches", [$thr])->first();
+            $a = $q->selectRaw(Sql::q("count(*) as assigned, count(*) filter (where status = 'responded') as responded,
+                count(*) filter (where extract(epoch from (coalesce(responded_at, now()) - received_at)) > ?::int * 60) as breaches"), [$thr])->first();
             $out[] = [
                 'id' => $m->id, 'name' => $m->name, 'avgThisWeekMs' => $w['avgMs'], 'avg30dMs' => $mo['avgMs'],
                 'improving' => $w['avgMs'] !== null && $mo['avgMs'] !== null ? $w['avgMs'] <= $mo['avgMs'] : null,
@@ -151,8 +152,8 @@ final class SlaService
 
     public static function campaignSla(Ctx $ctx, string $campaignId): array
     {
-        $s = Metrics::avgResponseMs($ctx->tenantId, '1970-01-01 00:00:00+00', null, self::mine(null, $campaignId));
-        $c = DB::table('leads')->where('tenant_id', $ctx->tenantId)->where('campaign_id', $campaignId)->selectRaw("count(*) as n, count(*) filter (where status = 'responded') as r")->first();
+        $s = Metrics::avgResponseMs($ctx->tenantId, Sql::day0('1970-01-01'), null, self::mine(null, $campaignId));
+        $c = DB::table('leads')->where('tenant_id', $ctx->tenantId)->where('campaign_id', $campaignId)->selectRaw(Sql::q("count(*) as n, count(*) filter (where status = 'responded') as r"))->first();
 
         return ['avgResponseMs' => $s['avgMs'], 'color' => Rules::speedColor($s['avgMs']), 'leadCount' => (int) $c->n, 'respondedCount' => (int) $c->r, 'thresholdMinutes' => (int) $ctx->tenant->sla_threshold_minutes];
     }

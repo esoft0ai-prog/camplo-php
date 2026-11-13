@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Domain\Rules;
 use App\Support\Fmt;
+use App\Support\Sql;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -37,12 +38,11 @@ final class Engine
 
     /**
      * One live card per condition: an undismissed card with the same key is refreshed in place instead of duplicated;
-     * a dismissed one stays dismissed for a day. Serialised per tenant + key with an advisory lock.
+     * a dismissed one stays dismissed for a day. Serialised per tenant + key with a named lock.
      */
     public static function upsertInsight(string $tenantId, array $i): bool
     {
-        return DB::transaction(function () use ($tenantId, $i) {
-            DB::select('select pg_advisory_xact_lock(hashtext(?))', ["{$tenantId}:{$i['dedupe_key']}"]);
+        return Sql::locked("{$tenantId}:{$i['dedupe_key']}", function () use ($tenantId, $i) {
             $live = DB::table('insights')->where('tenant_id', $tenantId)->where('dedupe_key', $i['dedupe_key'])->whereNull('dismissed_at')->first(['id']);
             if ($live) {
                 DB::table('insights')->where('id', $live->id)->update(['observation' => $i['observation'], 'evidence' => $i['evidence'] ?? null, 'severity' => $i['severity'], 'generated_at' => now()]);
@@ -238,7 +238,7 @@ Return ONLY JSON: {"action_text","why","evidence":[{"metric","change","period"}]
         }
         $refs = array_values(array_intersect($r['memory_references'], $memoryIds));
         $a = $r['apply_action'];
-        $id = DB::table('campaign_recommendations')->insertGetId([
+        $id = Sql::insertId('campaign_recommendations', [
             'tenant_id' => $t->id, 'campaign_id' => $campaignId, 'level' => $level, 'action_text' => $r['action_text'], 'why' => $r['why'], 'evidence' => json_encode($r['evidence']),
             'diagnosis' => $r['diagnosis'], 'expected_outcome' => $r['expected_outcome'], 'risk' => $r['risk'], 'confidence' => $r['confidence'], 'next_step' => $r['next_step'],
             'why_now' => $r['why_now'], 'memory_references' => json_encode($refs),
