@@ -10,7 +10,7 @@ class AuthTest extends TestCase
 {
     public function test_health(): void
     {
-        $this->getJson('/api/health')->assertOk()->assertJson(['ok' => true, 'database' => config('database.default') === 'mysql' ? 'mysql' : 'postgres']);
+        $this->getJson('/api/health')->assertOk()->assertJson(['ok' => true, 'database' => in_array(config('database.default'), ['mysql', 'mariadb'], true) ? 'mysql' : 'postgres']);
     }
 
     public function test_signup_login_me_and_cookies(): void

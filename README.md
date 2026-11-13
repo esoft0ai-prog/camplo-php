@@ -1,6 +1,6 @@
 # Camplo (Laravel)
 
-Camplo — the watchtower for your campaigns and leads — rebuilt on **Laravel 13 / PHP 8.3**. It runs on **MySQL 8** or
+Camplo — the watchtower for your campaigns and leads — rebuilt on **Laravel 13 / PHP 8.3**. It runs on **MySQL 8 / MariaDB 10.6+** or
 **PostgreSQL 14+** (`DB_CONNECTION=mysql` or `pgsql`); Render uses PostgreSQL.
 
 This is a port of the Node version. The JSON API keeps the same paths, inputs and response shapes, so the web client
@@ -21,9 +21,12 @@ The port was done in four stages; all of them are finished:
 
 ## Run locally
 
-Requirements: PHP 8.3, Composer, and MySQL 8.0.13+ (`pdo_mysql`) or PostgreSQL 14+ (`pdo_pgsql`). MariaDB is not
-supported. On Windows/WAMP the command line uses its own php.ini (`php --ini` shows which); make sure the driver is
-enabled there, e.g. `php -m | findstr pdo_mysql`.
+Requirements: PHP 8.3, Composer, and MySQL 8.0.13+ / MariaDB 10.6+ (`pdo_mysql`) or PostgreSQL 14+ (`pdo_pgsql`).
+On Windows/WAMP the command line uses its own php.ini (`php --ini` shows which); make sure the driver is enabled there.
+
+Something not working? `php artisan camplo:doctor` checks PHP extensions, the database, migrations, `APP_URL` and
+folder permissions, and says how to fix each problem. Serve the app from a site root (`php artisan serve`, or a virtual
+host pointing at `public/`): the web client calls `/api/...`, so a sub-folder such as `http://localhost/camplo` won't work.
 
 ```bash
 composer install

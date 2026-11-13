@@ -1,6 +1,6 @@
 # Camplo (Laravel) — guidance for contributors and AI agents
 
-Laravel 13 / PHP 8.3 port of the Node Camplo app. Runs on PostgreSQL (Render) and MySQL 8 (local/WAMP).
+Laravel 13 / PHP 8.3 port of the Node Camplo app. Runs on PostgreSQL (Render) and MySQL 8 / MariaDB 10.6+ (local/WAMP).
 
 ## Non-negotiables
 

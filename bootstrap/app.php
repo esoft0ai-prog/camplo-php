@@ -1,8 +1,14 @@
 <?php
 
+use App\Console\Commands\Doctor;
+use App\Console\Commands\SeedDemo;
+use App\Console\Commands\Sweep;
 use App\Http\Middleware\ApiHeaders;
 use App\Http\Middleware\Authed;
+use App\Http\Middleware\HostedSites;
 use App\Support\ApiException;
+use App\Support\Ctx;
+use App\Support\Errors;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -20,11 +26,11 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     // Registered by class name rather than by scanning app/Console/Commands, which can miss them on some setups.
-    ->withCommands([\App\Console\Commands\SeedDemo::class, \App\Console\Commands\Sweep::class])
+    ->withCommands([SeedDemo::class, Sweep::class, Doctor::class])
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias(['authed' => Authed::class]);
         // Custom domains and page subdomains are answered before any app route.
-        $middleware->prepend(\App\Http\Middleware\HostedSites::class);
+        $middleware->prepend(HostedSites::class);
         $middleware->api(prepend: [ApiHeaders::class]);
         // Render (and most hosts) terminate TLS at a proxy.
         $middleware->trustProxies(at: '*');
@@ -36,8 +42,8 @@ return Application::configure(basePath: dirname(__DIR__))
         // Unexpected errors are grouped in error_events (Super Admin → Errors) and forwarded to Sentry when configured.
         $exceptions->report(function (Throwable $e) {
             $r = request();
-            $user = app()->bound(\App\Support\Ctx::class) ? app(\App\Support\Ctx::class)->user : null;
-            \App\Support\Errors::capture($e, ['source' => 'server', 'route' => $r ? $r->method().' /'.ltrim($r->path(), '/') : null, 'userId' => $user->id ?? null, 'tenantId' => $user->tenant_id ?? null]);
+            $user = app()->bound(Ctx::class) ? app(Ctx::class)->user : null;
+            Errors::capture($e, ['source' => 'server', 'route' => $r ? $r->method().' /'.ltrim($r->path(), '/') : null, 'userId' => $user->id ?? null, 'tenantId' => $user->tenant_id ?? null]);
         });
         $isApi = fn (Request $r) => $r->is('api/*') || $r->is('api') || $r->expectsJson();
         $exceptions->render(function (ApiException $e) {
