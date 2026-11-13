@@ -54,10 +54,14 @@ return Application::configure(basePath: dirname(__DIR__))
             }
         });
         $exceptions->render(function (Throwable $e, Request $r) use ($isApi) {
-            if ($e instanceof HttpExceptionInterface || ! $isApi($r) || config('app.debug')) {
+            if ($e instanceof HttpExceptionInterface || ! $isApi($r)) {
                 return null;
             }
+            // With APP_DEBUG on, put the real error in `message` so the web client shows it instead of a generic line.
+            $message = config('app.debug')
+                ? class_basename($e).': '.$e->getMessage().' ('.str_replace(base_path().DIRECTORY_SEPARATOR, '', $e->getFile()).':'.$e->getLine().')'
+                : 'Something went wrong on our end. Try again in a moment.';
 
-            return response()->json(['code' => 'INTERNAL_SERVER_ERROR', 'message' => 'Something went wrong on our end. Try again in a moment.'], 500);
+            return response()->json(['code' => 'INTERNAL_SERVER_ERROR', 'message' => $message], 500);
         });
     })->create();
