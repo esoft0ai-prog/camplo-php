@@ -78,6 +78,13 @@ class Doctor extends Command
 
         // ---------------------------------------------------------------- database
         $this->info("Database ({$driver})");
+        if (! in_array($driver, ['mysql', 'mariadb', 'pgsql'], true)) {
+            $this->bad("The database connection is \"{$driver}\", which Camplo does not support",
+                'Put DB_CONNECTION=mysql and your DB_* settings in '.base_path('.env')."\n(the file must be named exactly .env — not .env.txt), then run: php artisan config:clear\nIf migrate already ran on SQLite, run php artisan migrate:fresh afterwards.");
+            $this->summary();
+
+            return self::FAILURE;
+        }
         try {
             DB::connection()->getPdo();
             $version = (string) DB::selectOne('select version() as v')->v;

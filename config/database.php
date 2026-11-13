@@ -17,7 +17,9 @@ return [
     |
     */
 
-    'default' => env('DB_CONNECTION', env('DATABASE_URL') ? 'pgsql' : 'sqlite'),
+    // Camplo runs on MySQL/MariaDB or PostgreSQL (not SQLite). With no DB_CONNECTION: PostgreSQL when DATABASE_URL is
+    // set (Render), otherwise MySQL (WAMP/XAMPP defaults).
+    'default' => env('DB_CONNECTION', env('DATABASE_URL') ? 'pgsql' : 'mysql'),
 
     /*
     |--------------------------------------------------------------------------

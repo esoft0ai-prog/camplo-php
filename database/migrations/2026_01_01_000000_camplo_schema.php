@@ -14,7 +14,12 @@ return new class extends Migration
 {
     public function up(): void
     {
-        $mysql = in_array(DB::connection()->getDriverName(), ['mysql', 'mariadb'], true);
+        $driver = DB::connection()->getDriverName();
+        if (! in_array($driver, ['mysql', 'mariadb', 'pgsql'], true)) {
+            throw new RuntimeException("Camplo needs MySQL 8 / MariaDB 10.6+ or PostgreSQL, but this connection is {$driver}. "
+                .'Set DB_CONNECTION=mysql (and DB_HOST, DB_PORT, DB_DATABASE, DB_USERNAME, DB_PASSWORD) in .env, then run: php artisan config:clear && php artisan migrate:fresh');
+        }
+        $mysql = in_array($driver, ['mysql', 'mariadb'], true);
         foreach (glob(database_path($mysql ? 'sql/mysql/*.sql' : 'sql/*.sql')) as $file) {
             if (! $mysql && $this->appliedByNode(basename($file, '.sql'))) {
                 continue;
