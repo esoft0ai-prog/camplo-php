@@ -1,0 +1,15 @@
+# Lets Apache serve Camplo from a sub-folder of its web root, e.g. WAMP: C:\wamp64\www\camplo → http://localhost/camplo
+# Every request goes to public/ (static files, else Laravel); nothing outside public/ (.env, app/, vendor/ …) is served.
+# Not used when the web server's document root is public/ itself (Docker/Render, php artisan serve).
+<IfModule mod_rewrite.c>
+    <IfModule mod_negotiation.c>
+        Options -MultiViews -Indexes
+    </IfModule>
+    RewriteEngine On
+    RewriteCond %{HTTP:Authorization} .
+    RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+    RewriteRule ^(.*)$ public/$1 [L]
+</IfModule>
+<IfModule !mod_rewrite.c>
+    Require all denied
+</IfModule>

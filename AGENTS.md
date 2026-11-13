@@ -11,6 +11,9 @@ Laravel 13 / PHP 8.3 port of the Node Camplo app. Runs on PostgreSQL (Render) an
 * **Secrets** are sealed with `Crypto::encrypt($value, $purpose)` and never returned to a client (use `Crypto::mask`).
 * **Schema changes** go in new Laravel migrations. Never edit `database/sql/*.sql` (they mirror what the Node app shipped).
 * SQL is parameterised; column names only come from code.
+* **Base path.** The app may be served from a sub-folder (http://localhost/camplo). In `public/*.js` build URLs with
+  `BASE + '/api/...'`; in HTML/CSS use relative paths; on the server use `url()` / `$request->getBaseUrl()`, never a
+  bare `'/...'` redirect.
 * **Both databases.** Prefer the query builder. Raw SQL is written in PostgreSQL form and wrapped in `Sql::q()` (which
   translates it for MySQL); use `Sql::insertId`, `Sql::updateReturning`, `Sql::locked` and `Sql::ts` instead of
   `insertGetId`, `RETURNING`, advisory locks and literal timestamps. Cast boolean columns with `(bool)` when serialising

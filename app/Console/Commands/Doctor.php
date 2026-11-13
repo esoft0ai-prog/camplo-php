@@ -64,8 +64,14 @@ class Doctor extends Command
         }
         $url = (string) config('app.url');
         $path = trim((string) parse_url($url, PHP_URL_PATH), '/');
-        $path === '' ? $this->ok("APP_URL {$url}")
-            : $this->bad("APP_URL has a sub-folder ({$url})", "The web app calls /api/... from the site root, so it cannot run under /{$path}.\nUse php artisan serve and APP_URL=http://localhost:8000,\nor a WAMP virtual host whose folder is camplo-php/public (e.g. http://camplo.test).");
+        $folder = basename(base_path());
+        if ($path === '') {
+            $this->ok("APP_URL {$url}");
+        } elseif (strcasecmp(basename($path), $folder) === 0) {
+            $this->ok("APP_URL {$url} (Apache serves this project folder, {$folder}, at /{$path})");
+        } else {
+            $this->bad("APP_URL ends in /{$path} but this project folder is called \"{$folder}\"", 'Apache serves a folder under its web root at /<folder name>. Either rename the folder to "'.basename($path)."\",\nor set APP_URL=".preg_replace('#/[^/]*$#', '', rtrim($url, '/'))."/{$folder}");
+        }
         if (! config('camplo.encryption_key') && ! env('ENCRYPTION_KEY')) {
             $this->note('ENCRYPTION_KEY is empty', 'Fine for a quick local test (a development key is used). Set one before keeping real data; never change it afterwards.');
         }

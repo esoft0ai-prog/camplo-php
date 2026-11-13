@@ -25,8 +25,13 @@ Requirements: PHP 8.3, Composer, and MySQL 8.0.13+ / MariaDB 10.6+ (`pdo_mysql`)
 On Windows/WAMP the command line uses its own php.ini (`php --ini` shows which); make sure the driver is enabled there.
 
 Something not working? `php artisan camplo:doctor` checks PHP extensions, the database, migrations, `APP_URL` and
-folder permissions, and says how to fix each problem. Serve the app from a site root (`php artisan serve`, or a virtual
-host pointing at `public/`): the web client calls `/api/...`, so a sub-folder such as `http://localhost/camplo` won't work.
+folder permissions, and says how to fix each problem.
+
+**WAMP / XAMPP (Apache, sub-folder).** Put the project in the web root as `camplo` (e.g. `C:\wamp64\www\camplo`), set
+`APP_URL=http://localhost/camplo`, and open that URL. The `.htaccess` in the project root sends every request to
+`public/` (so `.env`, `vendor/` and the source are never served) and the app works out its base path by itself.
+Apache needs `mod_rewrite` (WAMP: tray icon → Apache → Apache modules → rewrite_module). A site root works too
+(`php artisan serve`, or a virtual host pointing at `public/`).
 
 ```bash
 composer install

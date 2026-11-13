@@ -3,8 +3,10 @@
    email, AI, Telegram, signup. Aggregate data only — never lead or page content (ADL §7 #5). */
 (function () {
   'use strict';
+  // '' when Camplo is on a site root, '/camplo' when served from a sub-folder (taken from where this script was loaded).
+  var BASE = (document.currentScript ? document.currentScript.src : '').replace(/[?#].*$/, '').replace(/[^/]*$/, '').replace(location.origin, '').replace(/\/$/, '');
   // Browser errors go to Super Admin → Errors (and Sentry when configured).
-  function report(msg, stack) { try { navigator.sendBeacon ? navigator.sendBeacon('/api/monitor/client-error', new Blob([JSON.stringify({ message: String(msg).slice(0, 2000), stack: stack, url: location.href, source: 'admin', userAgent: navigator.userAgent })], { type: 'application/json' })) : 0; } catch (x) { /* never throw from the reporter */ } }
+  function report(msg, stack) { try { navigator.sendBeacon ? navigator.sendBeacon(BASE + '/api/monitor/client-error', new Blob([JSON.stringify({ message: String(msg).slice(0, 2000), stack: stack, url: location.href, source: 'admin', userAgent: navigator.userAgent })], { type: 'application/json' })) : 0; } catch (x) { /* never throw from the reporter */ } }
   window.addEventListener('error', function (e) { report(e.message, e.error && e.error.stack); });
   window.addEventListener('unhandledrejection', function (e) { var r = e.reason || {}; report(r.message || r, r.stack); });
   var root = document.getElementById('root');
@@ -25,7 +27,7 @@
     opts = opts || {};
     var headers = { 'Content-Type': 'application/json' };
     if (S.token) headers.Authorization = 'Bearer ' + S.token;
-    return fetch('/api' + path, { method: opts.method || 'GET', headers: headers, body: opts.body ? JSON.stringify(opts.body) : undefined }).then(function (r) {
+    return fetch(BASE + '/api' + path, { method: opts.method || 'GET', headers: headers, body: opts.body ? JSON.stringify(opts.body) : undefined }).then(function (r) {
       return r.text().then(function (t) {
         var j = null; try { j = t ? JSON.parse(t) : null; } catch (e) { j = null; }
         if (r.status === 401 && path !== '/admin/api/login') { S.token = null; save(null); render(); throw new Error('Session expired. Sign in again.'); }
@@ -53,7 +55,7 @@
       '<div class="field"><label>6-digit code</label><input class="input mono" name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required /></div>' +
       (S.error ? '<span class="errmsg">' + esc(S.error) + '</span>' : '') +
       '<button class="btn btn-primary btn-full" type="submit">Sign in</button></form>' +
-      '<a class="small" href="/" style="text-align:center">← Back to the app</a></div></div>';
+      '<a class="small" href="' + BASE + '/" style="text-align:center">← Back to the app</a></div></div>';
   }
 
   // ---------------------------------------------------------------- shell
@@ -154,7 +156,7 @@
             '<td><input class="input" style="width:100px" type="number" min="0" step="0.5" data-plan="' + p + '" data-budget value="' + pl.deepBudgetUsd + '" /></td></tr>';
         }).join('') + '</tbody></table></div>';
     } else if (sec === 'billing') {
-      body = '<div class="small" style="margin-bottom:16px">Polar.sh handles checkout and subscriptions. Set the Polar webhook endpoint to <span class="mono">' + esc(location.origin) + '/api/polar/webhook</span>.</div><div class="form-grid">' +
+      body = '<div class="small" style="margin-bottom:16px">Polar.sh handles checkout and subscriptions. Set the Polar webhook endpoint to <span class="mono">' + esc(location.origin + BASE) + '/api/polar/webhook</span>.</div><div class="form-grid">' +
         secretField('billing', 'polarAccessToken', 'Polar access token') + secretField('billing', 'polarWebhookSecret', 'Polar webhook secret') +
         textField('polarOrganizationId', 'Polar organization ID', v.polarOrganizationId) + textField('polarApiUrl', 'Polar API URL', v.polarApiUrl, 'type="url"') + '</div>' +
         '<div class="label" style="margin:20px 0 8px">Product ID per plan</div><div class="form-grid">' + PLANS.map(function (p) { return '<div class="field"><label>' + cap(p) + '</label><input class="input mono" data-map="productIds" data-plan="' + p + '" value="' + esc(v.productIds[p] || '') + '" /></div>'; }).join('') + '</div>' +

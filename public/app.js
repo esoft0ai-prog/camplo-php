@@ -1,6 +1,8 @@
 /* Camplo web client — talks to the Camplo API (/api). Vanilla JS, hash routing, no build step. */
 (function () {
   'use strict';
+  // '' when Camplo is on a site root, '/camplo' when served from a sub-folder (taken from where this script was loaded).
+  var BASE = (document.currentScript ? document.currentScript.src : '').replace(/[?#].*$/, '').replace(/[^/]*$/, '').replace(location.origin, '').replace(/\/$/, '');
   var MIN = 60000, HOUR = 60 * MIN, DAY = 24 * HOUR;
   var ic = window.CamploIcons.ic, lifeIcon = window.CamploIcons.lifeIcon;
   // Browser errors go to the Camplo error monitor (Super Admin → Errors, and Sentry when configured).
@@ -9,7 +11,7 @@
     if (++reported > 20) return; // a broken render loop shouldn't flood the monitor
     try {
       var body = JSON.stringify({ message: String(msg).slice(0, 2000), stack: stack, url: location.href, userAgent: navigator.userAgent });
-      fetch('/api/monitor/client-error', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body, credentials: 'same-origin', keepalive: true }).catch(function () {});
+      fetch(BASE + '/api/monitor/client-error', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body, credentials: 'same-origin', keepalive: true }).catch(function () {});
     } catch (x) { /* never throw from the reporter */ }
   }
   window.addEventListener('error', function (e) { if (e.message) reportError(e.message, e.error && e.error.stack); });
@@ -38,9 +40,9 @@
     var init = { method: opts.method || 'GET', credentials: 'same-origin', headers: {} };
     if (opts.body instanceof FormData) init.body = opts.body;
     else if (opts.body !== undefined) { init.body = JSON.stringify(opts.body); init.headers['Content-Type'] = 'application/json'; }
-    return fetch('/api' + path, init).then(function (res) {
+    return fetch(BASE + '/api' + path, init).then(function (res) {
       if (res.status === 401 && !opts.noRefresh && path.indexOf('/auth/') !== 0) {
-        return fetch('/api/auth/refresh', { method: 'POST', credentials: 'same-origin' }).then(function (r) {
+        return fetch(BASE + '/api/auth/refresh', { method: 'POST', credentials: 'same-origin' }).then(function (r) {
           if (r.ok) return api(path, Object.assign({}, opts, { noRefresh: true }));
           D = null; S.flash = 'Session expired. Please log in again.'; go('login');
           throw new Error('Session expired. Please log in again.');
@@ -154,7 +156,7 @@
   function connectRT() {
     streams.forEach(function (s) { s.close(); });
     streams = ['leads', 'insights', 'overdue-count', 'notifications', 'team-notes'].map(function (ch) {
-      var es = new EventSource('/api/rt/workspace/' + ch);
+      var es = new EventSource(BASE + '/api/rt/workspace/' + ch);
       es.addEventListener('update', function () { inval('lead:'); inval('camp:'); reload(); });
       return es;
     });
@@ -878,7 +880,7 @@
     }
     var r = st;
     return '<div style="max-width:960px"><div class="spread wrap"><div><h1 class="h1">Campaign retrospective</h1><div class="small italic" style="color:var(--text-muted);margin-top:4px">Generated automatically when campaign was marked complete</div></div>' +
-      '<a class="btn btn-primary" href="/api/campaigns/' + c.id + '/retrospective/pdf" download>' + ic('download', 15) + ' Download PDF</a></div>' +
+      '<a class="btn btn-primary" href="' + BASE + '/api/campaigns/' + c.id + '/retrospective/pdf" download>' + ic('download', 15) + ' Download PDF</a></div>' +
       '<div class="glass" style="padding:32px;margin-top:24px;cursor:default">' +
       '<div class="spread"><div><div class="h2">' + esc(r.campaignName) + '</div><div class="small">' + fmtDate(r.startDate) + ' – ' + fmtDate(r.endDate) + ' · ' + r.daysActive + ' days active</div></div><span class="badge b-blue">Complete</span></div>' +
       '<div class="kpis" style="grid-template-columns:repeat(' + (r.cpl != null ? 4 : 3) + ',1fr);margin:28px 0 0">' +
@@ -1278,7 +1280,7 @@
     var groups = [], by = {};
     v.forEach(function (i) { INT_NAMES[i.provider] = i.name; if (!by[i.category]) { by[i.category] = []; groups.push(i.category); } by[i.category].push(i); });
     var MODE = { receive: 'Receives', send: 'Sends', query: 'Reads' };
-    return '<div class="small" style="margin-bottom:8px">Lead sources send new leads into Camplo. CRMs and email tools send what happened next, so Camplo can watch every hand-off. Ad platforms and analytics are read-only. <a href="/docs/webhooks.html" target="_blank" rel="noopener">Webhook reference ↗</a></div>' +
+    return '<div class="small" style="margin-bottom:8px">Lead sources send new leads into Camplo. CRMs and email tools send what happened next, so Camplo can watch every hand-off. Ad platforms and analytics are read-only. <a href="' + BASE + '/docs/webhooks.html" target="_blank" rel="noopener">Webhook reference ↗</a></div>' +
       groups.map(function (g) {
         return '<div class="section-label"><span class="label">' + esc(g) + '</span></div><div class="int-grid">' + by[g].map(function (i) {
           var soon = i.status === 'coming_soon', lg = INT_LOGO[i.provider] || ['?', '#333'];
@@ -1301,10 +1303,10 @@
   function setWebhooks() {
     var inb = lazy('set:inbound', '/webhooks/inbound?limit=100', list), out = lazy('set:outbound', '/webhooks/outbound?limit=100', list), ints = lazy('set:int', '/integrations?limit=100', list);
     if (!inb || !out) return skel(4);
-    return '<div class="col gap16" style="max-width:1080px"><div class="card"><div class="spread wrap"><div><div class="h3">Inbound webhooks</div><div class="small">External tools send lead data to these URLs. Camplo receives and attributes it automatically. Every hosted page also has its own signed webhook (see Pages). <a href="/docs/webhooks.html#leads" target="_blank" rel="noopener">Payload &amp; signing reference ↗</a></div></div></div>' +
+    return '<div class="col gap16" style="max-width:1080px"><div class="card"><div class="spread wrap"><div><div class="h3">Inbound webhooks</div><div class="small">External tools send lead data to these URLs. Camplo receives and attributes it automatically. Every hosted page also has its own signed webhook (see Pages). <a href="' + BASE + '/docs/webhooks.html#leads" target="_blank" rel="noopener">Payload &amp; signing reference ↗</a></div></div></div>' +
       '<div style="margin-top:12px">' + (inb.__error ? errBox(inb) : inb.length ? inb.map(function (w) { return '<div class="list-row"><span class="mono grow" style="word-break:break-all">' + esc(w.url) + '</span><span style="width:220px">' + esc(w.sourceLabel) + (w.campaignName ? '<div class="ts">→ ' + esc(w.campaignName) + '</div>' : '') + '</span><span class="ts" style="width:110px">' + ago(ms(w.lastReceivedAt)) + '</span><span class="badge ' + (w.status === 'active' ? 'b-green' : 'b-grey') + '">' + w.status + '</span><button class="close" data-act="copy" data-v="' + esc(w.url) + '">' + ic('copy', 14) + '</button><button class="close" data-act="deleteInbound" data-id="' + w.id + '">' + ic('x', 14) + '</button></div>'; }).join('') : '<div class="small">No named inbound webhooks yet.</div>') + '</div>' +
       '<div class="row wrap" style="margin-top:12px"><input class="input" id="ibLabel" placeholder="Source label e.g. Facebook Ads — Black Friday" style="max-width:320px"/><select class="select" id="ibCamp" style="width:220px"><option value="">No campaign</option>' + D.campaigns.map(function (c) { return '<option value="' + c.id + '">' + esc(c.name) + '</option>'; }).join('') + '</select><button class="btn btn-primary" data-act="createInbound">Add inbound webhook</button></div></div>' +
-      '<div class="card"><div><div class="h3">Outbound webhooks</div><div class="small">Camplo sends events to these URLs — signed with HMAC-SHA256 in X-Camplo-Signature when a secret is set. <a href="/docs/webhooks.html#events" target="_blank" rel="noopener">What each event sends ↗</a></div></div><div style="margin-top:12px">' +
+      '<div class="card"><div><div class="h3">Outbound webhooks</div><div class="small">Camplo sends events to these URLs — signed with HMAC-SHA256 in X-Camplo-Signature when a secret is set. <a href="' + BASE + '/docs/webhooks.html#events" target="_blank" rel="noopener">What each event sends ↗</a></div></div><div style="margin-top:12px">' +
       (out.__error ? errBox(out) : out.length ? out.map(function (w) { return '<div class="list-row"><span class="mono grow" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(w.destinationUrl) + '</span><span class="chip">' + esc(w.eventTrigger) + '</span><span class="ts" style="width:110px">' + (w.lastSentAt ? ago(ms(w.lastSentAt)) : 'never sent') + '</span><span class="badge ' + (w.status === 'active' ? 'b-green' : 'b-grey') + '">' + w.status + '</span><button class="close" data-act="deleteOutbound" data-id="' + w.id + '">' + ic('x', 14) + '</button></div>'; }).join('') : '<div class="small">No outbound webhooks yet.</div>') + '</div>' +
       '<div class="row wrap" style="margin-top:12px"><input class="input" id="obUrl" placeholder="https://hooks.example.com/camplo" style="max-width:320px"/><select class="select" id="obEvent" style="width:200px">' + EVENTS.map(function (e) { return '<option>' + e + '</option>'; }).join('') + '</select><input class="input" id="obSecret" placeholder="HMAC secret (optional)" style="width:200px"/><button class="btn btn-primary" data-act="createOutbound">Add outbound webhook</button></div></div>' +
       '<div class="card"><div class="h3">Third-party integration API keys</div>' + (!ints || ints.__error ? '' : (ints.filter(function (i) { return i.status === 'connected' || i.status === 'failed'; }).map(function (i) { var sk = Object.keys(i.secrets || {}); return '<div class="list-row"><span class="grow"><b>' + esc(i.name) + '</b>' + (i.webhooks && i.webhooks.leads ? ' <span class="chip">Lead webhook</span>' : '') + '</span><span class="mono">' + esc(sk.length ? i.secrets[sk[0]] : (i.apiKeyMasked || 'No key needed')) + '</span>' + statusBadge(i.status) + '<button class="btn btn-ghost btn-sm" data-act="connectInt" data-v="' + i.provider + '">Edit</button></div>'; }).join('') || '<div class="small" style="margin-top:8px">No integrations connected yet. <a href="#/settings/integrations">Go to the Integrations tab.</a></div>')) + '</div>' +
@@ -2351,7 +2353,7 @@
           '<div class="menu-item" data-go="settings/profile">Profile &amp; picture</div><div class="menu-item" data-go="me">My performance</div><div class="menu-item" data-go="settings">Settings</div>' +
           (isOwner() ? '<div class="menu-item" data-go="settings/subscription">Subscription: ' + cap(D.plan) + ' <span class="chip chip-plan" style="margin-left:auto">Manage</span></div>' : '<div class="menu-item" style="cursor:default;color:var(--text-muted)">Plan: ' + cap(D.plan) + '</div>') +
           '<div class="menu-item" data-act="shortcuts">Keyboard shortcuts</div>' +
-          '<a class="menu-item" href="/docs/" target="_blank" rel="noopener" style="display:block;color:inherit;text-decoration:none">Help &amp; docs</a>' + '<div style="height:1px;background:var(--border-subtle);margin:4px 0"></div><div class="menu-item" style="color:var(--status-red)" data-act="logout">Sign out</div>', el, 260);
+          '<a class="menu-item" href="' + BASE + '/docs/" target="_blank" rel="noopener" style="display:block;color:inherit;text-decoration:none">Help &amp; docs</a>' + '<div style="height:1px;background:var(--border-subtle);margin:4px 0"></div><div class="menu-item" style="color:var(--status-red)" data-act="logout">Sign out</div>', el, 260);
         break;
       case 'logout': api('/auth/logout', { method: 'POST' }).finally(function () { D = null; C = {}; streams.forEach(function (s) { s.close(); }); closeOverlay(); go('login'); }); break;
       case 'shortcuts': openOverlay(modal('Keyboard shortcuts', '<dl class="kv" style="grid-template-columns:1fr auto"><dt>Search</dt><dd class="mono">⌘ K</dd><dt>Post note / send message</dt><dd class="mono">⌘ Enter</dd><dt>Close panel</dt><dd class="mono">Esc</dd></dl>')); break;
@@ -2471,7 +2473,7 @@
   }
 
   // Branding and prices set by the Super Admin; the app renders with defaults until they arrive.
-  fetch('/api/public/platform').then(function (r) { return r.ok ? r.json() : null; }).then(function (p) {
+  fetch(BASE + '/api/public/platform').then(function (r) { return r.ok ? r.json() : null; }).then(function (p) {
     if (!p) return;
     PF = p;
     if (p.productName && p.productName !== 'Camplo') document.title = p.productName + ' — ' + (p.tagline || '');

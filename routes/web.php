@@ -1,5 +1,8 @@
 <?php
 
+use App\Http\Controllers\SiteController;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -7,14 +10,18 @@ use Illuminate\Support\Facades\Route;
  * route gets the app shell, like the Node version did.
  */
 // Hosted landing pages on the app host.
-Route::get('/sites/{subdomain}/{path?}', [\App\Http\Controllers\SiteController::class, 'serve'])->where(['subdomain' => '[a-z0-9-]+', 'path' => '.*']);
+Route::get('/sites/{subdomain}/{path?}', [SiteController::class, 'serve'])->where(['subdomain' => '[a-z0-9-]+', 'path' => '.*']);
 
-Route::fallback(function () {
-    return response()->file(public_path('index.html'), ['Content-Type' => 'text/html; charset=utf-8', 'Cache-Control' => 'no-cache']);
-});
+// The HTML shells use relative asset paths; <base> points them at the app's root, which may be a sub-folder (/camplo).
+$shell = fn (Request $r, string $file) => response(
+    preg_replace('/<head>/', '<head>'."\n  ".'<base href="'.e($r->getBaseUrl()).'/" />', file_get_contents(public_path($file)), 1),
+    200, ['Content-Type' => 'text/html; charset=utf-8', 'Cache-Control' => 'no-cache'],
+);
+
+Route::fallback(fn (Request $r) => $shell($r, 'index.html'));
 
 // The Super Admin console and the documentation are separate static pages.
-Route::get('/admin', fn () => response()->file(public_path('admin.html'), ['Content-Type' => 'text/html; charset=utf-8', 'Cache-Control' => 'no-cache']));
-Route::get('/docs', fn (\Illuminate\Http\Request $r) => str_ends_with($r->getPathInfo(), '/')
+Route::get('/admin', fn (Request $r) => $shell($r, 'admin.html'));
+Route::get('/docs', fn (Request $r) => str_ends_with($r->getPathInfo(), '/')
     ? response()->file(public_path('docs/index.html'), ['Content-Type' => 'text/html; charset=utf-8'])
-    : new \Illuminate\Http\RedirectResponse('/docs/', 301));
+    : new RedirectResponse($r->getBaseUrl().'/docs/', 301));

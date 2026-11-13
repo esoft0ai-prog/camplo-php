@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Services\PageService;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -43,7 +44,7 @@ class SiteController
         $raw = rawurldecode($r->getPathInfo());
         $prefix = "/sites/{$subdomain}";
         if ($raw === $prefix) {
-            return new \Illuminate\Http\RedirectResponse("{$prefix}/", 301);
+            return new RedirectResponse($r->getBaseUrl()."{$prefix}/", 301);
         }
         $path = substr($raw, strlen($prefix) + 1);
         $site = PageService::resolveSite($subdomain);
