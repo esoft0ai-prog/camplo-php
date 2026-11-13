@@ -20,7 +20,9 @@ The port was done in four stages; all of them are finished:
 
 ## Run locally
 
-Requirements: PHP 8.3 with `pdo_pgsql`, Composer, PostgreSQL 14+.
+Requirements: PHP 8.3 with `pdo_pgsql`, Composer, PostgreSQL 14+. MySQL is not supported (the schema uses Postgres
+types). On Windows/WAMP, enable `extension=pdo_pgsql` and `extension=pgsql` in the php.ini the command line uses
+(`php --ini` shows which) — WAMP keeps a separate one for Apache — and check with `php -m | findstr pgsql`.
 
 ```bash
 composer install

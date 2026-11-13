@@ -19,6 +19,8 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
     )
+    // Registered by class name rather than by scanning app/Console/Commands, which can miss them on some setups.
+    ->withCommands([\App\Console\Commands\SeedDemo::class, \App\Console\Commands\Sweep::class])
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias(['authed' => Authed::class]);
         // Custom domains and page subdomains are answered before any app route.
