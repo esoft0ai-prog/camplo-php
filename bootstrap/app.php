@@ -45,7 +45,7 @@ return Application::configure(basePath: dirname(__DIR__))
             $user = app()->bound(Ctx::class) ? app(Ctx::class)->user : null;
             Errors::capture($e, ['source' => 'server', 'route' => $r ? $r->method().' /'.ltrim($r->path(), '/') : null, 'userId' => $user->id ?? null, 'tenantId' => $user->tenant_id ?? null]);
         });
-        $isApi = fn (Request $r) => $r->is('api/*') || $r->is('api') || $r->expectsJson();
+        $isApi = fn (Request $r) => $r->is('api/*') || $r->is('api') || str_contains('/'.$r->path().'/', '/api/') || $r->expectsJson();
         $exceptions->render(function (ApiException $e) {
             return response()->json($e->toArray(), $e->status);
         });

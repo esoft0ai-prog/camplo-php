@@ -10,15 +10,11 @@ if (file_exists($maintenance = __DIR__.'/../storage/framework/maintenance.php'))
     require $maintenance;
 }
 
-// Served from a sub-folder through the project-root .htaccess (e.g. http://localhost/camplo → camplo/public/): present
-// the project folder, not public/, as the script's location, so Laravel routes /camplo/api/... as /api/...
-$script = $_SERVER['SCRIPT_NAME'] ?? '';
-if (str_ends_with($script, '/public/index.php')) {
-    $dir = substr($script, 0, -strlen('/public/index.php'));
-    $uri = $_SERVER['REQUEST_URI'] ?? '';
-    if (! str_starts_with($uri, $dir.'/public/') && ($uri === $dir || str_starts_with($uri, $dir.'/'))) {
-        $_SERVER['SCRIPT_NAME'] = $_SERVER['PHP_SELF'] = $dir.'/index.php';
-    }
+// Served from a sub-folder of the web root (WAMP/XAMPP: http://localhost/camplo or /camplo/public): tell Laravel where
+// the app starts, so /camplo/api/... is routed as /api/...
+require __DIR__.'/../bootstrap/basepath.php';
+if (($base = camplo_base_path($_SERVER, __DIR__)) !== null) {
+    $_SERVER['SCRIPT_NAME'] = $_SERVER['PHP_SELF'] = $base.'/index.php';
 }
 
 // Register the Composer autoloader...
